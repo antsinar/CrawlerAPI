@@ -13,7 +13,7 @@ from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 
 from .constants import GRAPH_ROOT, Compressor, compressor_extensions
 from .lib import extract_graph, generate_graph, get_crawled_urls, validate_url
-from .models import GraphInfo, QueueUrl
+from .models import AdjList, GraphInfo, Node, QueueUrl
 from .processor import TaskQueue
 
 
@@ -21,10 +21,12 @@ from .processor import TaskQueue
 async def lifespan(app: FastAPI):
     try:
         load_dotenv(find_dotenv(".env"))
+        environment = environ.get("ENV", "development")
         GRAPH_ROOT.mkdir(exist_ok=True)
         task_queue = TaskQueue(capacity=1)
         app.state.task_queue = task_queue
         app.state.compressor = Compressor.GZIP
+        app.state.environment = environment
         processor = asyncio.create_task(task_queue.process_queue())
         yield
     except Exception as e:
@@ -33,13 +35,19 @@ async def lifespan(app: FastAPI):
         await task_queue.stop()
 
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(
+    lifespan=lifespan,
+    openapi_url="/openapi.json"
+    if environ.get("ENV", "development") != "production"
+    else None,
+)
 app.add_middleware(GZipMiddleware, minimum_size=3000, compresslevel=7)
 
 
 @app.middleware("http")
 async def pass_state_to_request(request: Request, call_next):
     request.state.compressor = app.state.compressor
+    request.state.environment = app.state.environment
     if request.method == "POST" and request.url.path in [
         "/queue-website/",
     ]:
@@ -59,11 +67,11 @@ async def redirect_to_maintenance(request: Request, call_next):
 
 
 @app.get("/", include_in_schema=False)
-async def root():
+async def root(request: Request):
     """Redirect to docs, if not in production"""
     return (
         RedirectResponse(url="/docs")
-        if environ.get("ENV") != "production"
+        if request.state.environment != "production"
         else {RedirectResponse(url="/graphs/all")}
     )
 
