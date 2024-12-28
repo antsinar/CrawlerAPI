@@ -60,7 +60,12 @@ async def redirect_to_maintenance(request: Request, call_next):
 
 @app.get("/", include_in_schema=False)
 async def root():
-    return RedirectResponse(url="/docs")
+    """Redirect to docs, if not in production"""
+    return (
+        RedirectResponse(url="/docs")
+        if environ.get("ENV") != "production"
+        else {RedirectResponse(url="/graphs/all")}
+    )
 
 
 @app.get("/graphs/all")
@@ -68,7 +73,6 @@ async def graphs():
     """Return already crawled website graphs"""
     return {
         "crawled_urls": await get_crawled_urls(),
-        "environment": environ.get("ENV", "production"),
     }
 
 
