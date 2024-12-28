@@ -1,0 +1,215 @@
+import asyncio
+import logging
+from contextlib import asynccontextmanager
+from functools import lru_cache
+from importlib import import_module
+from os import environ
+from types import ModuleType
+from typing import AsyncGenerator, Generator, List, Optional
+from urllib.parse import ParseResult, urljoin, urlparse
+from urllib.robotparser import RobotFileParser
+
+import networkx as nx
+import orjson
+from httpx import AsyncClient, AsyncHTTPTransport, RequestError
+from lxml import html
+
+from .constants import GRAPH_ROOT, Compressor, compressor_extensions
+from .models import AdjList, Node
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+async def validate_url(url: str) -> bool:
+    """Basic url validator; returns true if url is valid
+    :param url: url to validate
+    :return: bool
+    """
+    try:
+        result = urlparse(url)
+        return all([result.scheme, result.netloc])
+    except ValueError:
+        return False
+
+
+class Crawler:
+    def __init__(
+        self, client: AsyncClient, max_depth: int = 5, semaphore_size: int = 50
+    ) -> None:
+        self.client: AsyncClient = client
+        self.max_depth: int = max_depth
+        self.semaphore_size: int = semaphore_size
+        self.robotparser: Optional[RobotFileParser] = None
+        self.graph: nx.Graph = nx.Graph()
+
+    async def parse_robotsfile(self) -> None:
+        """Create a parser instance to check against while crawling"""
+        robotparser = RobotFileParser()
+        rbfile = await self.client.get("/robots.txt")
+        robotparser.parse(rbfile.text.split("\n") if rbfile.status_code == 200 else "")
+        self.robotparser = robotparser
+
+    async def check_robots_compliance(self, url: str) -> bool:
+        """Check if url is allowed by robots.txt
+        :param url: url to check
+        :return: bool
+        """
+        return self.robotparser.can_fetch("*", url)
+
+    async def build_graph(self, start_url: str) -> None:
+        """Function to run from the task queue to process a url and compress the graph
+        :param start_url: url to start from
+        """
+        visited = set()
+        semaphore = asyncio.Semaphore(self.semaphore_size)
+
+        async def crawl(
+            crawler: Crawler,
+            url: str,
+            depth: int,
+        ) -> None:
+            """Recursive function to crawl a website and build a graph
+            :param depth: depth of recursion; how many calls shall be allowed
+            """
+            if depth > crawler.max_depth or url in visited:
+                return
+
+            visited.add(url)
+            crawler.graph.add_node(url)
+
+            try:
+                logger.info(f"Visiting {urlparse(url).path}")
+                async with semaphore:
+                    response = await crawler.client.get(url)
+                if response.status_code != 200:
+                    return
+                if "text/html" not in response.headers["Content-Type"]:
+                    return
+                if not await crawler.check_robots_compliance(url):
+                    return
+
+                tree = html.fromstring(response.text)
+
+                for href in tree.xpath("//a/@href"):
+                    full_url = urljoin(url, href, allow_fragments=False)
+
+                    if urlparse(full_url).netloc == urlparse(start_url).netloc:
+                        crawler.graph.add_edge(url, full_url)
+                        await crawl(crawler, full_url, depth + 1)
+
+            except RequestError as e:
+                logger.error(e)
+
+        async with asyncio.TaskGroup() as tg:
+            tg.create_task(crawl(self, start_url, 0))
+
+    async def compress_graph(
+        self,
+        file_name: str,
+        compressor_module: ModuleType,
+        extension: str,
+    ) -> None:
+        """Save graph to disk in compressed format"""
+        file_name = (GRAPH_ROOT / file_name).as_posix()
+        data = nx.node_link_data(self.graph, edges="edges")
+        with compressor_module.open(file_name + extension, "wb") as f:
+            f.write(orjson.dumps(data))
+
+
+@asynccontextmanager
+async def generate_client(
+    base_url: Optional[str] = "",
+) -> AsyncGenerator[AsyncClient, None]:
+    """Configure an async http client for the crawler to use"""
+    headers = {
+        "User-Agent": "MapMakingCrawler/0.3.5",
+        "Accept": "text/html,application/json,application/xml;q=0.9",
+        "Keep-Alive": "500",
+        "Connection": "keep-alive",
+        "Accept-Encoding": "gzip,br",
+    }
+    in_production = environ.get("environment", "development") == "production"
+    transport = AsyncHTTPTransport(
+        retries=3,
+        verify=in_production,
+        local_address=("127.0.0.1", 0),
+        http2=in_production,
+        http1=not in_production,
+    )
+    client = AsyncClient(
+        base_url=base_url, transport=transport, headers=headers, follow_redirects=True
+    )
+    try:
+        yield client
+    except RequestError as e:
+        logger.error(e)
+    finally:
+        await client.aclose()
+
+
+async def process_url(url: str, compressor: Compressor = Compressor.GZIP) -> None:
+    """Function to run from the task queue to process a url and compress the graph
+    Contains all necessary steps to crawl a website and save a graph to disk in a
+    compressed format
+    :param url: base url to crawl
+    :param compressor: compressor module to use
+    :return: Future (in separate thread)
+    """
+    compressor_module = import_module(compressor.value)
+    async with generate_client(url) as client:
+        crawler = Crawler(client=client, max_depth=7, semaphore_size=100)
+        await crawler.parse_robotsfile()
+        logger.info("Crawling Website")
+        await crawler.build_graph(url)
+        logger.info("Compressing Graph")
+        await crawler.compress_graph(
+            urlparse(url).netloc,
+            compressor_module,
+            compressor_extensions[compressor],
+        )
+
+
+async def get_crawled_urls() -> List[str]:
+    """Return list of crawled urls, found as compressed files in GRAPH_ROOT
+    :return: List[str] (url netlocs)
+    """
+    return [
+        graph.stem
+        for graph in GRAPH_ROOT.iterdir()
+        if graph.is_file()
+        and graph.suffix == compressor_extensions[Compressor.GZIP.value]
+    ]
+
+
+@lru_cache(maxsize=10)
+def generate_graph(G: nx.Graph) -> Generator[str, None, None]:
+    """Return generator expression of serialized graph neighborhoods
+    :param G: networkx graph, undirected
+    :return: generator of serialized AdjList model
+    """
+    return (
+        AdjList(
+            source=Node(id=source),
+            dest=[Node(id=key) for key in dest_dict],
+        ).model_dump_json()
+        for source, dest_dict in G.adjacency()
+    )
+
+
+async def extract_graph(
+    url: str, compressor_module: ModuleType, extension: str
+) -> Optional[nx.Graph]:
+    """Create and return networkx graph from a compressed file, if the requested ulr is already crawled
+    :param url: url to extract graph from
+    :param compressor_module: compressor module
+    :param extension: compressed file extension
+    :return: networkx graph
+    """
+    parsed: ParseResult = urlparse(url)
+    if parsed.netloc not in await get_crawled_urls():
+        return None
+    file_name = (GRAPH_ROOT / parsed.netloc).as_posix()
+    with compressor_module.open(file_name + extension, "rb") as compressed:
+        G = nx.node_link_graph(orjson.loads(compressed.read()), edges="edges")
+    return G
