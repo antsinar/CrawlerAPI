@@ -4,3 +4,4 @@ orjson==3.10.12
 httpx==0.28.1
 networkx[default]==3.4.2
 lxml==5.3
+python-dotenv==1.0.1

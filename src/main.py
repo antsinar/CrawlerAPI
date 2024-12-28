@@ -6,6 +6,7 @@ from typing import Annotated, List, Optional
 from urllib.parse import ParseResult, urlparse
 
 import networkx as nx
+from dotenv import find_dotenv, load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
@@ -39,6 +40,7 @@ class CrawlQueueMiddleware(BaseHTTPMiddleware):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
+        load_dotenv(find_dotenv(".env"))
         GRAPH_ROOT.mkdir(exist_ok=True)
         task_queue = TaskQueue(capacity=1)
         app.state.task_queue = task_queue
@@ -84,7 +86,10 @@ async def root():
 @app.get("/graphs/all")
 async def graphs():
     """Return already crawled website graphs"""
-    return {"crawled_urls": await get_crawled_urls()}
+    return {
+        "crawled_urls": await get_crawled_urls(),
+        "environment": environ.get("ENV", "production"),
+    }
 
 
 @app.get("/graphs/")

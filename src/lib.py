@@ -129,7 +129,7 @@ async def generate_client(
         "Connection": "keep-alive",
         "Accept-Encoding": "gzip,br",
     }
-    in_production = environ.get("environment", "development") == "production"
+    in_production = environ.get("ENV", "development") == "production"
     transport = AsyncHTTPTransport(
         retries=3,
         verify=in_production,
