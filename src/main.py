@@ -10,31 +10,11 @@ from dotenv import find_dotenv, load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
-from starlette.middleware.base import BaseHTTPMiddleware
 
 from .constants import GRAPH_ROOT, Compressor, compressor_extensions
 from .lib import extract_graph, generate_graph, get_crawled_urls, validate_url
 from .models import GraphInfo, QueueUrl
 from .processor import TaskQueue
-
-
-class CrawlQueueMiddleware(BaseHTTPMiddleware):
-    def __init__(self, app: FastAPI, protected: List[str], task_queue: TaskQueue):
-        super().__init__(app)
-        self.protected = protected
-        self.task_queue = task_queue
-
-    async def dispatch(self, request: Request, call_next):
-        if request.method != "POST" or request.url.path not in self.protected:
-            return await call_next(request)
-        await self.task_queue.put(await request.json())
-        return JSONResponse(
-            status_code=201,
-            content={
-                "message": "Queued for Crawling",
-                "position": self.task_queue.queue.qsize(),
-            },
-        )
 
 
 @asynccontextmanager
