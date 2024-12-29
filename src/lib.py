@@ -21,18 +21,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-async def validate_url(url: str) -> bool:
-    """Basic url validator; returns true if url is valid
-    :param url: url to validate
-    :return: bool
-    """
-    try:
-        result = urlparse(url)
-        return all([result.scheme, result.netloc])
-    except ValueError:
-        return False
-
-
 class Crawler:
     def __init__(
         self, client: AsyncClient, max_depth: int = 5, semaphore_size: int = 50
@@ -170,18 +158,6 @@ async def process_url(url: str, compressor: Compressor = Compressor.GZIP) -> Non
         )
 
 
-async def get_crawled_urls() -> List[str]:
-    """Return list of crawled urls, found as compressed files in GRAPH_ROOT
-    :return: List[str] (url netlocs)
-    """
-    return [
-        graph.stem
-        for graph in GRAPH_ROOT.iterdir()
-        if graph.is_file()
-        and graph.suffix == compressor_extensions[Compressor.GZIP.value]
-    ]
-
-
 @lru_cache(maxsize=10)
 def generate_graph(G: nx.Graph) -> Generator[str, None, None]:
     """Return generator expression of serialized graph neighborhoods
@@ -197,19 +173,9 @@ def generate_graph(G: nx.Graph) -> Generator[str, None, None]:
     )
 
 
-async def extract_graph(
-    url: str, compressor_module: ModuleType, extension: str
-) -> Optional[nx.Graph]:
-    """Create and return networkx graph from a compressed file, if the requested ulr is already crawled
-    :param url: url to extract graph from
-    :param compressor_module: compressor module
-    :param extension: compressed file extension
-    :return: networkx graph
-    """
-    parsed: ParseResult = urlparse(url)
-    if parsed.netloc not in await get_crawled_urls():
-        return None
-    file_name = (GRAPH_ROOT / parsed.netloc).as_posix()
-    with compressor_module.open(file_name + extension, "rb") as compressed:
-        G = nx.node_link_graph(orjson.loads(compressed.read()), edges="edges")
-    return G
+def get_neighborhood(G: nx.Graph, node: Node) -> Optional[AdjList]:
+    """Return the list of connected nodes to a given graph node instance, if any"""
+    if node.id not in G.nodes():
+        return
+    neighborhood = G.neighbors(node.id)
+    return AdjList(source=node, dest=[Node(id=n) for n in neighborhood])

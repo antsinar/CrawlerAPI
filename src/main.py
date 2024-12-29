@@ -1,9 +1,7 @@
 import asyncio
 from contextlib import asynccontextmanager
-from importlib import import_module
 from os import environ
-from typing import Annotated, List, Optional
-from urllib.parse import ParseResult, urlparse
+from typing import Annotated, Callable, List
 
 import networkx as nx
 from dotenv import find_dotenv, load_dotenv
@@ -11,8 +9,15 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 
-from .constants import GRAPH_ROOT, Compressor, compressor_extensions
-from .lib import extract_graph, generate_graph, get_crawled_urls, validate_url
+from .constants import GRAPH_ROOT, Compressor
+from .dependencies import (
+    get_crawled_urls,
+    get_resolver,
+    queued_url_in_crawled,
+    url_in_crawled,
+    validate_url,
+)
+from .lib import generate_graph, get_neighborhood
 from .models import AdjList, GraphInfo, Node, QueueUrl
 from .processor import TaskQueue
 
@@ -61,7 +66,7 @@ async def redirect_to_maintenance(request: Request, call_next):
         return await call_next(request)
     raise HTTPException(
         status_code=503,
-        detail={"message": "Server Unavailable due to maintenance"},
+        detail="Server Unavailable due to maintenance",
         headers={"X-Server-Mode": "Maintenance Mode"},
     )
 
@@ -77,33 +82,22 @@ async def root(request: Request):
 
 
 @app.get("/graphs/all")
-async def graphs():
+async def graphs(crawled_urls: Annotated[List[str], Depends(get_crawled_urls)]):
     """Return already crawled website graphs"""
     return {
-        "crawled_urls": await get_crawled_urls(),
+        "crawled_urls": crawled_urls,
     }
 
 
-@app.get("/graphs/")
+@app.get("/graphs/", response_model=GraphInfo)
 async def graph_info(
     request: Request,
     url: str,
-    crawled_urls: Annotated[List[str], Depends(get_crawled_urls)],
+    url_crawled: Annotated[None, Depends(url_in_crawled)],
+    resolver: Annotated[Callable[[Compressor, bool], nx.Graph], Depends(get_resolver)],
 ):
     """Return graph information, if present"""
-    parsed: ParseResult = urlparse(url)
-    if parsed.netloc not in crawled_urls:
-        return JSONResponse(
-            status_code=404, content={"message": "Website not yet crawled"}
-        )
-    compressor_module = import_module(request.state.compressor.value)
-    G: Optional[nx.Graph] = await extract_graph(
-        url, compressor_module, compressor_extensions[request.state.compressor.value]
-    )
-    if not G:
-        return JSONResponse(
-            status_code=404, content={"message": "Website not yet crawled"}
-        )
+    G = resolver(request.state.compressor, not url_crawled)
     return GraphInfo(
         num_nodes=len(G.nodes()),
         num_edges=len(G.edges()),
@@ -114,14 +108,12 @@ async def graph_info(
 async def queue_website(
     request: Request,
     queue_url: QueueUrl,
-    crawled_urls: Annotated[List[str], Depends(get_crawled_urls)],
+    url_valid: Annotated[None, Depends(validate_url)],
+    url_crawled: Annotated[None, Depends(queued_url_in_crawled)],
 ):
     """Append website for crawling and return status"""
-    if not await validate_url(queue_url.url):
-        return JSONResponse(status_code=400, content={"message": "Invalid URL"})
-    parsed_url = urlparse(queue_url.url)
-    if parsed_url.netloc in crawled_urls and not queue_url.force:
-        return JSONResponse(status_code=409, content={"message": "Already Crawled"})
+    if not queue_url.force:
+        raise HTTPException(status_code=409, detail="Already Crawled")
     await request.state.task_queue.queue.put(queue_url.url)
     return JSONResponse(
         status_code=201,
@@ -136,22 +128,28 @@ async def queue_website(
 async def stream_graph(
     request: Request,
     url: str,
-    crawled_urls: Annotated[List[str], Depends(get_crawled_urls)],
+    url_crawled: Annotated[None, Depends(url_in_crawled)],
+    resolver: Annotated[Callable[[Compressor, bool], nx.Graph], Depends(get_resolver)],
 ) -> StreamingResponse:
-    if urlparse(url).netloc not in crawled_urls:
-        return JSONResponse(
-            status_code=404, content={"message": "Website not yet crawled"}
-        )
-    compressor_module = import_module(request.state.compressor.value)
-    G: Optional[nx.Graph] = await extract_graph(
-        url, compressor_module, compressor_extensions[request.state.compressor.value]
-    )
-    if not G:
-        return JSONResponse(
-            status_code=404, content={"message": "Website not yet crawled"}
-        )
-
+    G: nx.Graph = resolver(request.state.compressor, not url_crawled)
     response = StreamingResponse(
         content=generate_graph(G), media_type="application/json"
     )
     return response
+
+
+@app.post("/move-into-node", response_model=AdjList)
+async def move_into_node(
+    request: Request,
+    url: str,
+    node: Node,
+    url_crawled: Annotated[None, Depends(url_in_crawled)],
+    resolver: Annotated[Callable[[Compressor, bool], nx.Graph], Depends(get_resolver)],
+):
+    """Return the neighbourhood of a node instance in a graph
+    :param url: root url of graph
+    :param node: Node model instance
+    """
+    G = resolver(request.state.compressor, not url_crawled)
+    neighborhood = get_neighborhood(G, node)
+    return neighborhood

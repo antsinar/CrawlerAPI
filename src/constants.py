@@ -11,3 +11,6 @@ class Compressor(StrEnum):
 
 
 compressor_extensions = {Compressor.GZIP.value: ".gz", Compressor.LZMA.value: ".xz"}
+
+HTTP_SCHEME = "http://"
+HTTPS_SCHEME = "https://"
