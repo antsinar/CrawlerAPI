@@ -12,8 +12,8 @@ from .constants import GRAPH_ROOT, HTTPS_SCHEME, Compressor, compressor_extensio
 
 async def validate_url(request: Request) -> None:
     """Basic url validator; returns if url is valid
-    :param url: url to validate
-    :return: None
+    :param request: Request object from FastAPI; contains QueueUrl object from post request
+    returns if the url is valid, else raises HTTPException
     """
     try:
         req = await request.json()
@@ -25,7 +25,8 @@ async def validate_url(request: Request) -> None:
 
 def get_crawled_urls(request: Request) -> List[str]:
     """Return list of crawled urls, found as compressed files in GRAPH_ROOT
-    :return: List[str] (url netlocs)
+    :param request: Request object from FastAPI; contains Compressor object
+    :return: url netlocs as a list
     """
     return [
         graph.stem
@@ -40,7 +41,8 @@ def url_in_crawled(
 ) -> None:
     """Check if url is already crawled
     :param url: url to check
-    :return: None
+    :param crawled_urls: list of already crawled urls, as a fastapi dependency
+    returns if url is in crawled_urls, else raises HTTPException
     """
     parsed: ParseResult = urlparse(url)
     if parsed.netloc not in crawled_urls:
@@ -51,9 +53,10 @@ def url_in_crawled(
 async def queued_url_in_crawled(
     request: Request, crawled_urls: Annotated[List[str], Depends(get_crawled_urls)]
 ):
-    """Check if url is already queued for crawling
-    :param url: url to check
-    :return: None
+    """Check if a QueueUrl object is already crawled
+    :param request: Request object from FastAPI; contains QueueUrl object from post request
+    :param crawled_urls: list of already crawled urls, as a fastapi dependency
+    returns if url is in crawled_urls, else raises HTTPException
     """
     req = await request.json()
     parsed: ParseResult = urlparse(req["url"])
@@ -72,7 +75,8 @@ def extract_graph(
     :param url: url to extract graph from
     :param compressor_module: compressor module
     :param extension: compressed file extension
-    :return: networkx graph
+    :param url_crawled: boolean, is the url already crawled?
+    returns a networkx graph, if the url is already crawled, else None
     """
     if not url_crawled:
         return
@@ -88,11 +92,17 @@ class GraphResolver:
         self.url = url
 
     def __call__(self, compressor: Compressor, url_crawled: bool) -> Graph:
+        """Extracts a networkx graph object from a compressed file for a given
+        url and compressor module.
+        :param compressor: compressor module
+        :param url_crawled: boolean, is the url already crawled?
+        returns a networkx graph, if the url is already crawled, else raise HTTPException
+        """
         compressor_module: ModuleType = import_module(compressor.value)
         G: Optional[Graph] = extract_graph(
             self.url,
             compressor_module=compressor_module,
-            extension=compressor_extensions[compressor],
+            extension=compressor_extensions[compressor.value],
             url_crawled=url_crawled,
         )
         if not G:
@@ -104,7 +114,7 @@ class GraphResolver:
 def graph_resolvers(
     crawled_urls: Annotated[List[str], Depends(get_crawled_urls)],
 ) -> dict[str, GraphResolver]:
-    """Return dictionary of graph dependency callables"""
+    """Return dictionary of GraphResolver callables, initiated for every crawled url"""
     return {url: GraphResolver(HTTPS_SCHEME + url) for url in crawled_urls}
 
 
@@ -112,8 +122,10 @@ def get_resolver(
     url: str,
     resolvers: Annotated[dict[str, GraphResolver], Depends(graph_resolvers)],
 ) -> Callable[[Compressor, bool], Graph]:
-    """Return graph dependency callable
-    url parameter already exists at that point
+    """Returns the corresponding GraphResolver instance for the given url
+    :param url: url to get resolver for, usually already validated at that point
+    :param resolvers: dictionary of GraphResolver callables
+    In the chance the url does not exist, raise 500 HTTPException
     """
     try:
         return resolvers[urlparse(url).netloc]
