@@ -1,7 +1,8 @@
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 orjson==3.10.12
-httpx==0.28.1
+httpx[http2]==0.28.1
 networkx[default]==3.4.2
 lxml==5.3
+cssselect==1.2.0
 python-dotenv==1.0.1
