@@ -50,13 +50,28 @@ def url_in_crawled(
     return
 
 
-async def queued_url_in_crawled(
+async def url_in_crawled_from_object(
     request: Request, crawled_urls: Annotated[List[str], Depends(get_crawled_urls)]
 ):
     """Check if a QueueUrl object is already crawled
     :param request: Request object from FastAPI; contains QueueUrl object from post request
     :param crawled_urls: list of already crawled urls, as a fastapi dependency
     returns if url is in crawled_urls, else raises HTTPException
+    """
+    req = await request.json()
+    parsed: ParseResult = urlparse(req["url"])
+    if parsed.netloc not in crawled_urls:
+        raise HTTPException(status_code=404, detail="Website not yet crawled")
+    return
+
+
+async def url_not_in_crawled_from_object(
+    request: Request, crawled_urls: Annotated[List[str], Depends(get_crawled_urls)]
+):
+    """Check if a QueueUrl object is not already crawled
+    :param request: Request object from FastAPI; contains QueueUrl object from post request
+    :param crawled_urls: list of already crawled urls, as a fastapi dependency
+    returns if url is not in crawled_urls, else raises HTTPException
     """
     req = await request.json()
     parsed: ParseResult = urlparse(req["url"])
@@ -133,3 +148,11 @@ def get_resolver(
         raise HTTPException(
             status_code=500, detail="Unexpected error: get_resolver dependency"
         )
+
+
+async def get_resolver_from_object(
+    request: Request,
+    resolvers: Annotated[dict[str, GraphResolver], Depends(graph_resolvers)],
+) -> Callable[[Compressor, bool], Graph]:
+    res = await request.json()
+    return resolvers[urlparse(res["url"]).netloc]

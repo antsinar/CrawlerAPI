@@ -26,3 +26,11 @@ class GraphInfo(BaseModel):
 class QueueUrl(BaseModel):
     url: str
     force: bool = False
+
+
+class NodeInGraph(BaseModel):
+    url: str
+    node: Node
+
+    def __str__(self):
+        return f"{self.url}: {self.node}"

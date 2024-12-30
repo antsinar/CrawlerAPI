@@ -1,7 +1,8 @@
 import asyncio
+import random
 from contextlib import asynccontextmanager
 from os import environ
-from typing import Annotated, Callable, List
+from typing import Annotated, Callable, List, Tuple
 
 import networkx as nx
 from dotenv import find_dotenv, load_dotenv
@@ -9,16 +10,18 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 
-from .constants import GRAPH_ROOT, Compressor
+from .constants import GRAPH_ROOT, Compressor, Difficulty, distance_ranges
 from .dependencies import (
     get_crawled_urls,
     get_resolver,
-    queued_url_in_crawled,
+    get_resolver_from_object,
     url_in_crawled,
+    url_in_crawled_from_object,
+    url_not_in_crawled_from_object,
     validate_url,
 )
 from .lib import generate_graph, get_neighborhood
-from .models import AdjList, GraphInfo, Node, QueueUrl
+from .models import AdjList, GraphInfo, Node, NodeInGraph, QueueUrl
 from .processor import TaskQueue
 
 
@@ -109,10 +112,10 @@ async def queue_website(
     request: Request,
     queue_url: QueueUrl,
     url_valid: Annotated[None, Depends(validate_url)],
-    url_crawled: Annotated[None, Depends(queued_url_in_crawled)],
+    url_crawled: Annotated[None, Depends(url_not_in_crawled_from_object)],
 ):
     """Append website for crawling and return status"""
-    if not queue_url.force:
+    if not url_crawled and queue_url.force:
         raise HTTPException(status_code=409, detail="Already Crawled")
     await request.state.task_queue.queue.put(queue_url.url)
     return JSONResponse(
@@ -138,18 +141,43 @@ async def stream_graph(
     return response
 
 
-@app.post("/move-into-node", response_model=AdjList)
-async def move_into_node(
+@app.post("/generate-course", response_model=Tuple[Node, Node])
+async def generate_course(
     request: Request,
-    url: str,
-    node: Node,
-    url_crawled: Annotated[None, Depends(url_in_crawled)],
-    resolver: Annotated[Callable[[Compressor, bool], nx.Graph], Depends(get_resolver)],
+    node_in_graph: NodeInGraph,
+    difficulty: Difficulty,
+    url_crawled: Annotated[None, Depends(url_in_crawled_from_object)],
+    resolver: Annotated[
+        Callable[[Compressor, bool], nx.Graph], Depends(get_resolver_from_object)
+    ],
+) -> Tuple[Node, Node]:
+    """Generate a random course in a graph, with a max distance based on difficulty option"""
+    G = resolver(request.state.compressor, not url_crawled)
+    distance_range = distance_ranges[difficulty]
+    source = node_in_graph.node.id
+    nodes_list = list(G.nodes)
+    dest = random.choice(nodes_list)
+    while source == dest or not nx.has_path(G, source, dest):
+        dest = random.choice(nodes_list)
+    print(nx.shortest_path_length(G, source, dest), nx.shortest_path(G, source, dest))
+    return Node(id=source), Node(id=dest)
+
+
+@app.post("/move-into-node", response_model=AdjList)
+async def get_node_neighborhood(
+    request: Request,
+    node_in_graph: NodeInGraph,
+    url_crawled: Annotated[None, Depends(url_in_crawled_from_object)],
+    resolver: Annotated[
+        Callable[[Compressor, bool], nx.Graph], Depends(get_resolver_from_object)
+    ],
 ):
     """Return the neighbourhood of a node instance in a graph
     :param url: root url of graph
     :param node: Node model instance
     """
     G = resolver(request.state.compressor, not url_crawled)
-    neighborhood = get_neighborhood(G, node)
+    neighborhood = get_neighborhood(G, node_in_graph.node)
+    if not neighborhood:
+        raise HTTPException(status_code=404, detail="Node not found")
     return neighborhood

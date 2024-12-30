@@ -5,8 +5,8 @@ from functools import lru_cache
 from importlib import import_module
 from os import environ
 from types import ModuleType
-from typing import AsyncGenerator, Generator, List, Optional
-from urllib.parse import ParseResult, urljoin, urlparse
+from typing import AsyncGenerator, Generator, Optional
+from urllib.parse import urljoin, urlparse
 from urllib.robotparser import RobotFileParser
 
 import networkx as nx
@@ -67,20 +67,21 @@ class Crawler:
             crawler.graph.add_node(url)
 
             try:
-                logger.info(f"Visiting {urlparse(url).path}")
                 async with semaphore:
                     response = await crawler.client.get(url)
                 if response.status_code != 200:
+                    logger.info(f"Non-200 response: {urlparse(url).path}")
                     return
                 if "text/html" not in response.headers["Content-Type"]:
+                    logger.info(f"Not HTML: {urlparse(url).path}")
                     return
                 if not await crawler.check_robots_compliance(url):
                     return
 
                 tree = html.fromstring(response.text)
 
-                for href in tree.xpath("//a/@href"):
-                    full_url = urljoin(url, href, allow_fragments=False)
+                for href in tree.cssselect("a[href]"):
+                    full_url = urljoin(url, href.attrib["href"], allow_fragments=False)
 
                     if urlparse(full_url).netloc == urlparse(start_url).netloc:
                         crawler.graph.add_edge(url, full_url)
@@ -90,7 +91,7 @@ class Crawler:
                 logger.error(e)
 
         async with asyncio.TaskGroup() as tg:
-            tg.create_task(crawl(self, start_url, 0))
+            results = tg.create_task(crawl(self, start_url, 0))
 
     async def compress_graph(
         self,
@@ -115,14 +116,13 @@ async def generate_client(
         "Accept": "text/html,application/json,application/xml;q=0.9",
         "Keep-Alive": "500",
         "Connection": "keep-alive",
-        "Accept-Encoding": "gzip,br",
+        "Accept-Encoding": "gzip, deflate, br",
     }
     in_production = environ.get("ENV", "development") == "production"
     transport = AsyncHTTPTransport(
         retries=3,
         verify=in_production,
-        local_address=("127.0.0.1", 0),
-        http2=in_production,
+        http2=not in_production,
         http1=not in_production,
     )
     client = AsyncClient(
@@ -146,7 +146,7 @@ async def process_url(url: str, compressor: Compressor = Compressor.GZIP) -> Non
     """
     compressor_module = import_module(compressor.value)
     async with generate_client(url) as client:
-        crawler = Crawler(client=client, max_depth=7, semaphore_size=100)
+        crawler = Crawler(client=client, max_depth=10, semaphore_size=20)
         await crawler.parse_robotsfile()
         logger.info("Crawling Website")
         await crawler.build_graph(url)
@@ -175,7 +175,7 @@ def generate_graph(G: nx.Graph) -> Generator[str, None, None]:
 
 def get_neighborhood(G: nx.Graph, node: Node) -> Optional[AdjList]:
     """Return the list of connected nodes to a given graph node instance, if any"""
-    if node.id not in G.nodes():
+    if node.id not in G.nodes:
         return
     neighborhood = G.neighbors(node.id)
     return AdjList(source=node, dest=[Node(id=n) for n in neighborhood])

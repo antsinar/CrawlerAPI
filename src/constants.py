@@ -10,6 +10,18 @@ class Compressor(StrEnum):
     LZMA = "lzma"
 
 
+class Difficulty(StrEnum):
+    EASY = "easy"
+    MEDIUM = "medium"
+    HARD = "hard"
+
+
+distance_ranges = {
+    Difficulty.EASY: range(30, 80),
+    Difficulty.MEDIUM: range(80, 150),
+    Difficulty.HARD: range(150, 300),
+}
+
 compressor_extensions = {Compressor.GZIP.value: ".gz", Compressor.LZMA.value: ".xz"}
 
 HTTP_SCHEME = "http://"
