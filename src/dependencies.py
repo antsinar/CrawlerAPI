@@ -7,7 +7,14 @@ import orjson
 from fastapi import Depends, HTTPException, Request
 from networkx import Graph, node_link_graph
 
-from .constants import GRAPH_ROOT, HTTPS_SCHEME, Compressor, compressor_extensions
+from .constants import (
+    GRAPH_ROOT,
+    HTTPS_SCHEME,
+    Compressor,
+    Difficulty,
+    compressor_extensions,
+    distance_ranges,
+)
 
 
 async def validate_url(request: Request) -> None:
@@ -98,7 +105,8 @@ def extract_graph(
     parsed: ParseResult = urlparse(url)
     file_name = (GRAPH_ROOT / parsed.netloc).as_posix()
     with compressor_module.open(file_name + extension, "rb") as compressed:
-        G = node_link_graph(orjson.loads(compressed.read()), edges="edges")
+        contents = compressed.read()
+        G = node_link_graph(orjson.loads(contents), edges="edges")
     return G
 
 

@@ -17,9 +17,9 @@ class Difficulty(StrEnum):
 
 
 distance_ranges = {
-    Difficulty.EASY: range(30, 80),
-    Difficulty.MEDIUM: range(80, 150),
-    Difficulty.HARD: range(150, 300),
+    Difficulty.EASY: range(0, 1000),
+    Difficulty.MEDIUM: range(1000, 10000),
+    Difficulty.HARD: range(10000, 100000),
 }
 
 compressor_extensions = {Compressor.GZIP.value: ".gz", Compressor.LZMA.value: ".xz"}

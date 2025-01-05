@@ -63,6 +63,8 @@ class Crawler:
             if depth > crawler.max_depth or url in visited:
                 return
 
+            p = urlparse(url).path
+            logger.info(f"Crawling: {p}")
             visited.add(url)
             crawler.graph.add_node(url)
 
@@ -70,12 +72,13 @@ class Crawler:
                 async with semaphore:
                     response = await crawler.client.get(url)
                 if response.status_code != 200:
-                    logger.info(f"Non-200 response: {urlparse(url).path}")
+                    logger.info(f"Non-200 response: {p}")
                     return
                 if "text/html" not in response.headers["Content-Type"]:
-                    logger.info(f"Not HTML: {urlparse(url).path}")
+                    logger.info(f"Not HTML: {p}")
                     return
                 if not await crawler.check_robots_compliance(url):
+                    logger.info(f"Blocked by robots.txt: {p}")
                     return
 
                 tree = html.fromstring(response.text)
@@ -100,6 +103,9 @@ class Crawler:
         extension: str,
     ) -> None:
         """Save graph to disk in compressed format"""
+        if self.graph.number_of_nodes() <= 1:
+            logger.info("Skipping compression, no graph nodes found")
+            return
         file_name = (GRAPH_ROOT / file_name).as_posix()
         data = nx.node_link_data(self.graph, edges="edges")
         with compressor_module.open(file_name + extension, "wb") as f:
@@ -112,7 +118,7 @@ async def generate_client(
 ) -> AsyncGenerator[AsyncClient, None]:
     """Configure an async http client for the crawler to use"""
     headers = {
-        "User-Agent": "MapMakingCrawler/0.3.5",
+        "User-Agent": "MapMakingCrawler/0.3.7",
         "Accept": "text/html,application/json,application/xml;q=0.9",
         "Keep-Alive": "500",
         "Connection": "keep-alive",
@@ -122,7 +128,7 @@ async def generate_client(
     transport = AsyncHTTPTransport(
         retries=3,
         verify=in_production,
-        http2=not in_production,
+        http2=True,
         http1=not in_production,
     )
     client = AsyncClient(
@@ -146,7 +152,7 @@ async def process_url(url: str, compressor: Compressor = Compressor.GZIP) -> Non
     """
     compressor_module = import_module(compressor.value)
     async with generate_client(url) as client:
-        crawler = Crawler(client=client, max_depth=10, semaphore_size=20)
+        crawler = Crawler(client=client, max_depth=8, semaphore_size=10)
         await crawler.parse_robotsfile()
         logger.info("Crawling Website")
         await crawler.build_graph(url)
@@ -158,7 +164,6 @@ async def process_url(url: str, compressor: Compressor = Compressor.GZIP) -> Non
         )
 
 
-@lru_cache(maxsize=10)
 def generate_graph(G: nx.Graph) -> Generator[str, None, None]:
     """Return generator expression of serialized graph neighborhoods
     :param G: networkx graph, undirected
