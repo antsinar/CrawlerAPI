@@ -25,7 +25,7 @@ from .dependencies import (
     validate_url,
 )
 from .lib import generate_graph, get_neighborhood
-from .management import GraphInfoUpdater
+from .management import GraphCleaner, GraphInfoUpdater
 from .models import AdjList, Course, GraphInfo, Node, NodeInGraph, QueueUrl
 from .processor import TaskQueue
 
@@ -43,8 +43,11 @@ async def lifespan(app: FastAPI):
         app.state.task_queue = task_queue
         app.state.compressor = Compressor.GZIP
         app.state.environment = environment
+        cleaner = GraphCleaner(app.state.compressor)
         info_updater = GraphInfoUpdater(app.state.compressor)
-        asyncio.gather(asyncio.create_task(info_updater.update_info()))
+        async with asyncio.TaskGroup() as tg:
+            tg.create_task(info_updater.update_info())
+            tg.create_task(cleaner.sweep())
         app.state.graph_info = info_updater.graph_info
         processor = asyncio.create_task(task_queue.process_queue())
         yield
@@ -52,6 +55,7 @@ async def lifespan(app: FastAPI):
         pass
     finally:
         await task_queue.stop()
+        await cleaner.stop()
         await info_updater.stop()
 
 
@@ -157,7 +161,6 @@ async def generate_course_url(
 ) -> dict[str, str]:
     """Return course url based on difficulty"""
     difficulty_range = distance_ranges[difficulty]
-    # TODO: Pre-compute these mappings once a new graph is created
     possible_urls = [
         url
         for url in resolvers.keys()

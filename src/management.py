@@ -1,10 +1,10 @@
 import asyncio
 import logging
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from functools import partial
 from importlib import import_module
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import orjson
 
@@ -16,9 +16,9 @@ logger = logging.getLogger(__name__)
 
 
 class GraphManager:
-    def __init__(self, compressor: Compressor, processes: int = 2) -> None:
+    def __init__(self, compressor: Compressor, processes: Optional[int] = None) -> None:
         self.compressor = compressor
-        self.pool = ProcessPoolExecutor(max_workers=processes)
+        self.pool = ThreadPoolExecutor(max_workers=processes)
         self.graphs: List[Path] = None
         self.graph_info: dict[str, GraphInfo] = None
         self.available = True
@@ -48,23 +48,29 @@ class GraphCleaner(GraphManager):
             except orjson.JSONDecodeError:
                 graph.unlink()
 
-    async def graph_cleanup(self) -> None:
+    async def sweep(self):
+        self._collect_graphs()
+        for graph, fn in zip(
+            self.graphs, self.pool.map(self._sweep_dirty_graph, self.graphs)
+        ):
+            logger.info(f"Examining {graph.name}")
+        logger.info("Graph sweep complete")
+
+    async def watch_graphs(self) -> None:
         """Delete invalid graphs from file system"""
         last_modified = GRAPH_ROOT.stat().st_mtime
-        loop = asyncio.get_running_loop()
         logger.info("Starting Graph Cleanup background task")
         while self.available:
             if last_modified == GRAPH_ROOT.stat().st_mtime:
                 continue
             logger.info("Detected change inside the graph directory")
-            self._collect_graphs()
-            map_fn = partial(self.pool.map, self._sweep_dirty_graph, self.graphs)
-            res = await loop.run_in_executor(self.pool, map_fn)
+            async with asyncio.TaskGroup as tg:
+                tg.create_task(self.sweep())
             last_modified = GRAPH_ROOT.stat().st_mtime
 
 
 class GraphInfoUpdater(GraphManager):
-    def __init__(self, compressor: Compressor, processes: int = 4):
+    def __init__(self, compressor: Compressor, processes: Optional[int] = None):
         super().__init__(compressor, processes)
         self.graph_info: Dict[str, GraphInfo] = {}
 
@@ -76,21 +82,24 @@ class GraphInfoUpdater(GraphManager):
             self.graph_info[graph.stem] = GraphInfo(
                 num_nodes=len(data["nodes"]), num_edges=len(data["edges"])
             )
-            logger.info(f"Updated graph info for {graph.stem}")
 
     async def update_info(self) -> None:
         """Update graph info in app state"""
         self._collect_graphs()
-        [self.pool.submit(self._update_graph_info(graph)) for graph in self.graphs]
+        for graph, fn in zip(
+            self.graphs, self.pool.map(self._update_graph_info, self.graphs)
+        ):
+            logger.info(f"Updated graph info for {graph.stem}")
+        logger.info("Graph update complete")
 
     async def watch_graphs(self) -> None:
         """Watch graph directory for changes and update graphs"""
         logger.info("Starting Graph Watch background task")
         last_modified = GRAPH_ROOT.stat().st_mtime
-        loop = asyncio.get_running_loop()
         while self.available:
             if last_modified == GRAPH_ROOT.stat().st_mtime:
                 continue
             logger.info("Detected change inside the graph directory")
-            asyncio.gather(asyncio.create_task(self.update_info()))
+            async with asyncio.TaskGroup as tg:
+                tg.create_task(self.update_info())
             last_modified = GRAPH_ROOT.stat().st_mtime
