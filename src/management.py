@@ -21,6 +21,7 @@ class GraphManager:
         self.graphs: List[Path] = None
         self.graph_info: dict[str, GraphInfo] = None
         self.available = True
+        self.parsed: set[Path] = set()
 
     def _collect_graphs(self) -> None:
         self.graphs = [
@@ -47,11 +48,16 @@ class GraphCleaner(GraphManager):
             except orjson.JSONDecodeError:
                 graph.unlink()
 
-    def sweep(self):
+    def sweep(self, force: bool = False):
         self._collect_graphs()
+        if not force:
+            remaining = [graph for graph in self.graphs if graph not in self.parsed]
+        else:
+            remaining = self.graphs
         for graph, fn in zip(
-            self.graphs, self.pool.map(self._sweep_dirty_graph, self.graphs)
+            remaining, self.pool.map(self._sweep_dirty_graph, remaining)
         ):
+            self.parsed.add(graph)
             logger.info(f"Examining {graph.name}")
         logger.info("Graph sweep complete")
 
@@ -70,12 +76,17 @@ class GraphInfoUpdater(GraphManager):
                 num_nodes=len(data["nodes"]), num_edges=len(data["edges"])
             )
 
-    def update_info(self) -> None:
+    def update_info(self, force: bool = False) -> None:
         """Update graph info in app state"""
         self._collect_graphs()
+        if not force:
+            remaining = [graph for graph in self.graphs if graph not in self.parsed]
+        else:
+            remaining = self.graphs
         for graph, fn in zip(
-            self.graphs, self.pool.map(self._update_graph_info, self.graphs)
+            remaining, self.pool.map(self._update_graph_info, remaining)
         ):
+            self.parsed.add(graph)
             logger.info(f"Updated graph info for {graph.stem}")
         logger.info("Graph update complete")
 

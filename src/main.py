@@ -176,7 +176,6 @@ async def generate_course_url(
 ) -> dict[str, str]:
     """Return course url based on difficulty"""
     difficulty_range = distance_ranges[difficulty]
-    # TODO: Graph info registered after startup are not in the request state yet
     possible_urls = [
         url
         for url in resolvers.keys()
@@ -226,7 +225,7 @@ async def move_into_node(request: Request):
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
-@app.get("/move-into-node", response_model=AdjList)
+@app.get("/get-node-neighborhood", response_model=AdjList)
 async def get_node_neighborhood(
     request: Request,
     node_in_graph: NodeInGraph,
