@@ -2,6 +2,7 @@ import asyncio
 import logging
 import random
 from contextlib import asynccontextmanager
+from functools import partial
 from os import environ
 from typing import Annotated, Callable, List
 from urllib.parse import urlparse
@@ -25,7 +26,7 @@ from .dependencies import (
     validate_url,
 )
 from .lib import generate_graph, get_neighborhood
-from .management import GraphCleaner, GraphInfoUpdater
+from .management import GraphCleaner, GraphInfoUpdater, GraphWatcher
 from .models import AdjList, Course, GraphInfo, Node, NodeInGraph, QueueUrl
 from .processor import TaskQueue
 
@@ -45,11 +46,18 @@ async def lifespan(app: FastAPI):
         app.state.environment = environment
         cleaner = GraphCleaner(app.state.compressor)
         info_updater = GraphInfoUpdater(app.state.compressor)
+        watchdog = GraphWatcher(app.state.compressor)
+
+        loop = asyncio.get_event_loop()
         async with asyncio.TaskGroup() as tg:
-            tg.create_task(info_updater.update_info())
-            tg.create_task(cleaner.sweep())
+            tg.create_task(
+                watchdog.run_scheduled_functions(
+                    loop, [cleaner.sweep, info_updater.update_info]
+                )
+            )
         app.state.graph_info = info_updater.graph_info
         processor = asyncio.create_task(task_queue.process_queue())
+        asyncio.create_task(watchdog.watch_graphs(cleaner, info_updater))
         yield
     except Exception as e:
         pass
@@ -57,6 +65,7 @@ async def lifespan(app: FastAPI):
         await task_queue.stop()
         await cleaner.stop()
         await info_updater.stop()
+        await watchdog.stop()
 
 
 app = FastAPI(
@@ -114,9 +123,15 @@ async def graph_info(
     request: Request,
     url: str,
     url_crawled: Annotated[None, Depends(url_in_crawled)],
+    resolver: Annotated[Callable[[Compressor, bool], nx.Graph], Depends(get_resolver)],
 ):
     """Return graph information, if present"""
-    return request.state.graph_info[urlparse(url).netloc]
+    try:
+        return request.state.graph_info[urlparse(url).netloc]
+    except KeyError:
+        logger.info("Generating graph info")
+        G = resolver(request.state.compressor, True)
+        return GraphInfo(num_nodes=G.number_of_nodes(), num_edges=G.number_of_edges())
 
 
 @app.post("/queue-website/")
@@ -161,6 +176,7 @@ async def generate_course_url(
 ) -> dict[str, str]:
     """Return course url based on difficulty"""
     difficulty_range = distance_ranges[difficulty]
+    # TODO: Graph info registered after startup are not in the request state yet
     possible_urls = [
         url
         for url in resolvers.keys()

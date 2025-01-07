@@ -152,7 +152,7 @@ async def process_url(url: str, compressor: Compressor = Compressor.GZIP) -> Non
     """
     compressor_module = import_module(compressor.value)
     async with generate_client(url) as client:
-        crawler = Crawler(client=client, max_depth=8, semaphore_size=10)
+        crawler = Crawler(client=client, max_depth=10, semaphore_size=20)
         await crawler.parse_robotsfile()
         logger.info("Crawling Website")
         await crawler.build_graph(url)

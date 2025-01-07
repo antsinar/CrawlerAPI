@@ -1,10 +1,9 @@
 import asyncio
 import logging
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
-from functools import partial
+from concurrent.futures import ThreadPoolExecutor
 from importlib import import_module
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 
 import orjson
 
@@ -48,25 +47,13 @@ class GraphCleaner(GraphManager):
             except orjson.JSONDecodeError:
                 graph.unlink()
 
-    async def sweep(self):
+    def sweep(self):
         self._collect_graphs()
         for graph, fn in zip(
             self.graphs, self.pool.map(self._sweep_dirty_graph, self.graphs)
         ):
             logger.info(f"Examining {graph.name}")
         logger.info("Graph sweep complete")
-
-    async def watch_graphs(self) -> None:
-        """Delete invalid graphs from file system"""
-        last_modified = GRAPH_ROOT.stat().st_mtime
-        logger.info("Starting Graph Cleanup background task")
-        while self.available:
-            if last_modified == GRAPH_ROOT.stat().st_mtime:
-                continue
-            logger.info("Detected change inside the graph directory")
-            async with asyncio.TaskGroup as tg:
-                tg.create_task(self.sweep())
-            last_modified = GRAPH_ROOT.stat().st_mtime
 
 
 class GraphInfoUpdater(GraphManager):
@@ -83,7 +70,7 @@ class GraphInfoUpdater(GraphManager):
                 num_nodes=len(data["nodes"]), num_edges=len(data["edges"])
             )
 
-    async def update_info(self) -> None:
+    def update_info(self) -> None:
         """Update graph info in app state"""
         self._collect_graphs()
         for graph, fn in zip(
@@ -92,14 +79,29 @@ class GraphInfoUpdater(GraphManager):
             logger.info(f"Updated graph info for {graph.stem}")
         logger.info("Graph update complete")
 
-    async def watch_graphs(self) -> None:
+
+class GraphWatcher(GraphManager):
+    async def run_scheduled_functions(
+        self, loop: asyncio.BaseEventLoop, functions: List[Callable[[None], None]]
+    ):
+        [await loop.run_in_executor(self.pool, fn) for fn in functions]
+
+    async def watch_graphs(
+        self, cleaner: GraphCleaner, updater: GraphInfoUpdater
+    ) -> None:
         """Watch graph directory for changes and update graphs"""
         logger.info("Starting Graph Watch background task")
         last_modified = GRAPH_ROOT.stat().st_mtime
+        loop = asyncio.get_event_loop()
         while self.available:
             if last_modified == GRAPH_ROOT.stat().st_mtime:
+                await asyncio.sleep(1)
                 continue
             logger.info("Detected change inside the graph directory")
-            async with asyncio.TaskGroup as tg:
-                tg.create_task(self.update_info())
+            async with asyncio.TaskGroup() as tg:
+                tg.create_task(
+                    self.run_scheduled_functions(
+                        loop, [cleaner.sweep, updater.update_info]
+                    )
+                )
             last_modified = GRAPH_ROOT.stat().st_mtime
