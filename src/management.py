@@ -65,7 +65,7 @@ class GraphCleaner(GraphManager):
 class GraphInfoUpdater(GraphManager):
     def __init__(self, compressor: Compressor, processes: Optional[int] = None):
         super().__init__(compressor, processes)
-        self.graph_info: Dict[str, GraphInfo] = {}
+        self.graph_info: Dict[str, GraphInfo] = dict()
 
     def _update_graph_info(self, graph: Path) -> None:
         """Resolve graph information"""
@@ -109,10 +109,13 @@ class GraphWatcher(GraphManager):
                 await asyncio.sleep(1)
                 continue
             logger.info("Detected change inside the graph directory")
-            async with asyncio.TaskGroup() as tg:
-                tg.create_task(
-                    self.run_scheduled_functions(
-                        loop, [cleaner.sweep, updater.update_info]
+            try:
+                async with asyncio.TaskGroup() as tg:
+                    tg.create_task(
+                        self.run_scheduled_functions(
+                            loop, [cleaner.sweep, updater.update_info]
+                        )
                     )
-                )
-            last_modified = GRAPH_ROOT.stat().st_mtime
+                last_modified = GRAPH_ROOT.stat().st_mtime
+            except* PermissionError as p:
+                logger.error(p)
