@@ -1,7 +1,6 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
-from functools import lru_cache
 from importlib import import_module
 from os import environ
 from types import ModuleType
@@ -93,8 +92,12 @@ class Crawler:
             except RequestError as e:
                 logger.error(e)
 
-        async with asyncio.TaskGroup() as tg:
-            results = tg.create_task(crawl(self, start_url, 0))
+        try:
+            async with asyncio.TaskGroup() as tg:
+                results = tg.create_task(crawl(self, start_url, 0))
+        except* ValueError as IPError:
+            logger.error("Terminating due to error", IPError)
+        return
 
     async def compress_graph(
         self,
@@ -152,7 +155,7 @@ async def process_url(url: str, compressor: Compressor = Compressor.GZIP) -> Non
     """
     compressor_module = import_module(compressor.value)
     async with generate_client(url) as client:
-        crawler = Crawler(client=client, max_depth=10, semaphore_size=20)
+        crawler = Crawler(client=client, max_depth=10, semaphore_size=30)
         await crawler.parse_robotsfile()
         logger.info("Crawling Website")
         await crawler.build_graph(url)
