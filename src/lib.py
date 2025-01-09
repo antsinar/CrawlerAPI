@@ -8,9 +8,10 @@ from typing import AsyncGenerator, Generator, Optional
 from urllib.parse import urljoin, urlparse
 from urllib.robotparser import RobotFileParser
 
+import chardet
 import networkx as nx
 import orjson
-from httpx import AsyncClient, AsyncHTTPTransport, RequestError
+from httpx import AsyncClient, AsyncHTTPTransport, HTTPStatusError, RequestError
 from lxml import html
 
 from .constants import GRAPH_ROOT, Compressor, compressor_extensions
@@ -44,12 +45,40 @@ class Crawler:
         """
         return self.robotparser.can_fetch("*", url)
 
+    async def pre_crawl_setup(self, start_url: str) -> bool:
+        """Returns a ready for crawl flag
+        The result can be false, not ready for crawl, if the website returns an error
+        http status code.
+        Otherwise moodify the headers of the client pool if its perfoming the upcoming
+        requests over http/2
+        """
+        test_connection_response = await self.client.head(start_url)
+
+        try:
+            test_connection_response.raise_for_status()
+        except HTTPStatusError:
+            logger.info("Crawling not permitted on this website")
+            return False
+
+        if test_connection_response.extensions["http_version"] == b"HTTP/2":
+            del self.client.headers["Keep-Alive"]
+            del self.client.headers["Connection"]
+            logger.info("Set up headers for http/2")
+
+        logger.info(
+            f"Crawling initialized from client @ {test_connection_response.extensions["network_stream"].get_extra_info("server_addr")}"
+        )
+        return True
+
     async def build_graph(self, start_url: str) -> None:
         """Function to run from the task queue to process a url and compress the graph
         :param start_url: url to start from
         """
         visited = set()
         semaphore = asyncio.Semaphore(self.semaphore_size)
+
+        if not await self.pre_crawl_setup(start_url):
+            return
 
         async def crawl(
             crawler: Crawler,
@@ -80,11 +109,10 @@ class Crawler:
                     logger.info(f"Blocked by robots.txt: {p}")
                     return
 
-                tree = html.fromstring(response.text)
+                tree = html.document_fromstring(response.text)
 
                 for href in tree.cssselect("a[href]"):
                     full_url = urljoin(url, href.attrib["href"], allow_fragments=False)
-
                     if urlparse(full_url).netloc == urlparse(start_url).netloc:
                         crawler.graph.add_edge(url, full_url)
                         await crawl(crawler, full_url, depth + 1)
@@ -94,7 +122,7 @@ class Crawler:
 
         try:
             async with asyncio.TaskGroup() as tg:
-                results = tg.create_task(crawl(self, start_url, 0))
+                tg.create_task(crawl(self, start_url, 0))
         except* ValueError as IPError:
             logger.error("Terminating due to error", IPError)
         return
@@ -135,7 +163,11 @@ async def generate_client(
         http1=not in_production,
     )
     client = AsyncClient(
-        base_url=base_url, transport=transport, headers=headers, follow_redirects=True
+        base_url=base_url,
+        transport=transport,
+        headers=headers,
+        follow_redirects=True,
+        default_encoding=lambda content: chardet.detect(content).get("encoding"),
     )
     try:
         yield client
