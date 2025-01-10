@@ -113,7 +113,10 @@ class Crawler:
 
                 for href in tree.cssselect("a[href]"):
                     full_url = urljoin(url, href.attrib["href"], allow_fragments=False)
-                    if urlparse(full_url).netloc == urlparse(start_url).netloc:
+                    next_url = urlparse(full_url)
+                    if "/#" in next_url.path:
+                        return
+                    if next_url.netloc == urlparse(start_url).netloc:
                         crawler.graph.add_edge(url, full_url)
                         await crawl(crawler, full_url, depth + 1)
 
@@ -149,7 +152,7 @@ async def generate_client(
 ) -> AsyncGenerator[AsyncClient, None]:
     """Configure an async http client for the crawler to use"""
     headers = {
-        "User-Agent": "MapMakingCrawler/0.4.0",
+        "User-Agent": "MapMakingCrawler/0.4.1",
         "Accept": "text/html,application/json,application/xml;q=0.9",
         "Keep-Alive": "500",
         "Connection": "keep-alive",
