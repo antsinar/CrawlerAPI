@@ -149,11 +149,12 @@ async def generate_client(
 ) -> AsyncGenerator[AsyncClient, None]:
     """Configure an async http client for the crawler to use"""
     headers = {
-        "User-Agent": "MapMakingCrawler/0.3.7",
+        "User-Agent": "MapMakingCrawler/0.4.0",
         "Accept": "text/html,application/json,application/xml;q=0.9",
         "Keep-Alive": "500",
         "Connection": "keep-alive",
         "Accept-Encoding": "gzip, deflate, br",
+        "Accept-Language": "en, el-GR;q=0.9",
     }
     in_production = environ.get("ENV", "development") == "production"
     transport = AsyncHTTPTransport(
