@@ -128,6 +128,8 @@ class Crawler:
                 tg.create_task(crawl(self, start_url, 0))
         except* ValueError as IPError:
             logger.error("Terminating due to error", IPError)
+        except* KeyError as HeaderMissingError:
+            logger.error("Terminating due to error", HeaderMissingError)
         return
 
     async def compress_graph(
@@ -152,7 +154,7 @@ async def generate_client(
 ) -> AsyncGenerator[AsyncClient, None]:
     """Configure an async http client for the crawler to use"""
     headers = {
-        "User-Agent": "MapMakingCrawler/0.4.1",
+        "User-Agent": "MapMakingCrawler/0.4.2",
         "Accept": "text/html,application/json,application/xml;q=0.9",
         "Keep-Alive": "500",
         "Connection": "keep-alive",
