@@ -166,7 +166,7 @@ async def resolve_course_url(request: Request, uid: str) -> str:
         raise HTTPException(
             status_code=404, detail="ID does not correspond to an active course"
         )
-    return request.state_active_courses[uid]
+    return request.state.active_courses[uid]
 
 
 async def resolve_graph_from_course(
@@ -176,4 +176,4 @@ async def resolve_graph_from_course(
     resolvers: Annotated[dict[str, GraphResolver], Depends(graph_resolvers)],
 ) -> Callable[[Compressor, bool], Graph]:
     """Determine a course from its uid and return the corresponding graph resolver object"""
-    return resolvers[course_url]
+    return resolvers[urlparse(course_url).netloc]
