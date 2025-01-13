@@ -6,10 +6,12 @@ from typing import Annotated, Callable, List
 from urllib.parse import urlparse
 
 import networkx as nx
+import orjson
 from dotenv import find_dotenv, load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
+from starlette.concurrency import iterate_in_threadpool
 
 from .constants import GRAPH_ROOT, Compressor
 from .dependencies import (
@@ -78,8 +80,14 @@ app.add_middleware(GZipMiddleware, minimum_size=3000, compresslevel=7)
 async def append_new_course_to_app_state(request: Request, call_next):
     """If a new course is initialized, appends its uid and base url inside the application state"""
     if request.method == "POST" and request.url.path == "/course/begin":
-        req_body = await request.json()
-        app.state.active_courses[req_body["course"]["uid"]] = req_body["course"]["url"]
+        response = await call_next(request)
+        resp_body = [chunk async for chunk in response.body_iterator]
+        response.body_iterator = iterate_in_threadpool(iter(resp_body))
+        resp_body = orjson.loads(resp_body[0])
+        app.state.active_courses[resp_body["course"]["uid"]] = urlparse(
+            resp_body["course"]["url"]
+        ).netloc
+        return response
     return await call_next(request)
 
 
