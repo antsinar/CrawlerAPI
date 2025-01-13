@@ -7,14 +7,8 @@ import orjson
 from fastapi import Depends, HTTPException, Request
 from networkx import Graph, node_link_graph
 
-from .constants import (
-    GRAPH_ROOT,
-    HTTPS_SCHEME,
-    Compressor,
-    Difficulty,
-    compressor_extensions,
-    distance_ranges,
-)
+from .constants import GRAPH_ROOT, HTTPS_SCHEME, Compressor, compressor_extensions
+from .models import Course
 
 
 async def validate_url(request: Request) -> None:
@@ -164,3 +158,22 @@ async def get_resolver_from_object(
 ) -> Callable[[Compressor, bool], Graph]:
     res = await request.json()
     return resolvers[urlparse(res["url"]).netloc]
+
+
+async def resolve_course_url(request: Request, uid: str) -> str:
+    """Search the running courses for given course uid and return the url, otherwise raise HTTPExceprion"""
+    if uid not in request.state.active_courses.keys():
+        raise HTTPException(
+            status_code=404, detail="ID does not correspond to an active course"
+        )
+    return request.state_active_courses[uid]
+
+
+async def resolve_graph_from_course(
+    request: Request,
+    uid: str,
+    course_url: Annotated[Course, Depends(resolve_course_url)],
+    resolvers: Annotated[dict[str, GraphResolver], Depends(graph_resolvers)],
+) -> Callable[[Compressor, bool], Graph]:
+    """Determine a course from its uid and return the corresponding graph resolver object"""
+    return resolvers[course_url]
