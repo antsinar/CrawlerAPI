@@ -25,7 +25,7 @@ class AdjList(BaseModel):
 class GraphInfo(BaseModel):
     num_nodes: int
     num_edges: int
-    teleport_nodes: List[Node]
+    teleport_nodes: List[Node] = Field(default_factory=list)
 
 
 class QueueUrl(BaseModel):
@@ -65,6 +65,7 @@ class CourseScoreTracker(BaseModel):
 class CoursePathTracker(BaseModel):
     """Maintain track of player movement throughout the play session"""
 
+    current_node: Node
     movement_path: List[Node]
     teleport_nodes_used: List[Node] = Field(default_factory=list)
 
