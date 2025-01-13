@@ -1,8 +1,6 @@
 import asyncio
 import logging
-import random
 from contextlib import asynccontextmanager
-from functools import partial
 from os import environ
 from typing import Annotated, Callable, List
 from urllib.parse import urlparse
@@ -13,13 +11,11 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 
-from .constants import GRAPH_ROOT, Compressor, Difficulty, distance_ranges
+from .constants import GRAPH_ROOT, Compressor
 from .dependencies import (
-    GraphResolver,
     get_crawled_urls,
     get_resolver,
     get_resolver_from_object,
-    graph_resolvers,
     url_in_crawled,
     url_in_crawled_from_object,
     url_not_in_crawled_from_object,
@@ -27,8 +23,9 @@ from .dependencies import (
 )
 from .lib import generate_graph, get_neighborhood
 from .management import GraphCleaner, GraphInfoUpdater, GraphWatcher
-from .models import AdjList, Course, GraphInfo, Node, NodeInGraph, QueueUrl
+from .models import AdjList, GraphInfo, NodeInGraph, QueueUrl
 from .processor import TaskQueue
+from .routers.game import router as game_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -41,13 +38,9 @@ async def lifespan(app: FastAPI):
         environment = environ.get("ENV", "development")
         GRAPH_ROOT.mkdir(exist_ok=True)
         task_queue = TaskQueue(capacity=1)
-        app.state.task_queue = task_queue
-        app.state.compressor = Compressor.GZIP
-        app.state.environment = environment
         cleaner = GraphCleaner(app.state.compressor)
         info_updater = GraphInfoUpdater(app.state.compressor)
         watchdog = GraphWatcher(app.state.compressor)
-
         loop = asyncio.get_event_loop()
         async with asyncio.TaskGroup() as tg:
             tg.create_task(
@@ -55,9 +48,13 @@ async def lifespan(app: FastAPI):
                     loop, [cleaner.sweep, info_updater.update_info]
                 )
             )
-        app.state.graph_info = info_updater.graph_info
         processor = asyncio.create_task(task_queue.process_queue())
         asyncio.create_task(watchdog.watch_graphs(cleaner, info_updater))
+        app.state.task_queue = task_queue
+        app.state.compressor = Compressor.GZIP
+        app.state.environment = environment
+        app.state.info_updater = info_updater
+        app.state.active_courses = dict()
         yield
     except Exception as e:
         pass
@@ -78,10 +75,19 @@ app.add_middleware(GZipMiddleware, minimum_size=3000, compresslevel=7)
 
 
 @app.middleware("http")
+async def append_new_course_to_app_state(request: Request, call_next):
+    """If a new course is initialized, appends its uid and base url inside the application state"""
+    if request.method == "POST" and request.url.path == "/course/begin":
+        req_body = await request.json()
+        app.state.active_courses[req_body["course"]["uid"]] = req_body["course"]["url"]
+
+
+@app.middleware("http")
 async def pass_state_to_request(request: Request, call_next):
     request.state.compressor = app.state.compressor
     request.state.environment = app.state.environment
-    request.state.graph_info = app.state.graph_info
+    request.state.graph_info = app.state.info_updater.graph_info
+    request.state.active_courses = app.state.active_courses
     if request.method == "POST" and request.url.path in [
         "/queue-website/",
     ]:
@@ -98,6 +104,9 @@ async def redirect_to_maintenance(request: Request, call_next):
         detail="Server Unavailable due to maintenance",
         headers={"X-Server-Mode": "Maintenance Mode"},
     )
+
+
+app.include_router(game_router)
 
 
 @app.get("/", include_in_schema=False)
@@ -129,7 +138,7 @@ async def graph_info(
     try:
         return request.state.graph_info[urlparse(url).netloc]
     except KeyError:
-        logger.info("Generating graph info")
+        logger.info("Computing graph info")
         G = resolver(request.state.compressor, True)
         return GraphInfo(num_nodes=G.number_of_nodes(), num_edges=G.number_of_edges())
 
@@ -166,63 +175,6 @@ async def stream_graph(
         content=generate_graph(G), media_type="application/json"
     )
     return response
-
-
-@app.get("/generate-course-url")
-async def generate_course_url(
-    request: Request,
-    difficulty: Difficulty,
-    resolvers: Annotated[dict[str, GraphResolver], Depends(graph_resolvers)],
-) -> dict[str, str]:
-    """Return course url based on difficulty"""
-    difficulty_range = distance_ranges[difficulty]
-    possible_urls = [
-        url
-        for url in resolvers.keys()
-        if request.state.graph_info[url].num_nodes in difficulty_range
-    ]
-    random.shuffle(possible_urls)
-    return {"url": random.choice(possible_urls)}
-
-
-@app.post("/generate-course", response_model=Course)
-async def generate_course(
-    request: Request,
-    url: str,
-    open_ended: bool,
-    url_crawled: Annotated[None, Depends(url_in_crawled)],
-    resolver: Annotated[Callable[[Compressor, bool], nx.Graph], Depends(get_resolver)],
-):
-    """Generate a random course in a graph with a random start and end node
-    TODO:
-    - Create a model that holds the current position and the current score
-    - Tie this object to a user session
-    """
-    G = resolver(request.state.compressor, not url_crawled)
-    nodes_list = list(G.nodes)
-    source = random.choice(nodes_list)
-    if open_ended:
-        return Course(url=url, start_node=Node(id=source), end_node=None)
-    source_neighbors = G.neighbors(source)
-    dest = random.choice(nodes_list)
-    while (
-        source == dest or not nx.has_path(G, source, dest) or dest in source_neighbors
-    ):
-        dest = random.choice(nodes_list)
-
-    return Course(url=url, start_node=Node(id=source), end_node=Node(id=dest))
-
-
-@app.post("/course-begin")
-async def course_begin(request: Request):
-    """Begin a course and return the current position"""
-    raise HTTPException(status_code=501, detail="Not implemented")
-
-
-@app.post("/move-into-node")
-async def move_into_node(request: Request):
-    """Move into a node and return the current position and score"""
-    raise HTTPException(status_code=501, detail="Not implemented")
 
 
 @app.get("/get-node-neighborhood", response_model=AdjList)

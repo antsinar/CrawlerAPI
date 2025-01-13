@@ -1,4 +1,4 @@
-from enum import StrEnum
+from enum import Enum, StrEnum
 from pathlib import Path
 
 GRAPH_ROOT = Path(__file__).parent.parent / "graphs"
@@ -16,8 +16,15 @@ class Difficulty(StrEnum):
     HARD = "hard"
 
 
-distance_ranges = {
-    Difficulty.EASY: range(0, 1000),
+class MoveOptions(Enum):
+    ONE_HUNDRED = 100
+    TWO_HUNDRED = 200
+    FIVE_HUNDRED = 500
+    ONE_THOUSAND = 1000
+
+
+difficulty_ranges = {
+    Difficulty.EASY: range(50, 1000),
     Difficulty.MEDIUM: range(1000, 10000),
     Difficulty.HARD: range(10000, 100000),
 }
