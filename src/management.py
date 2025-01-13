@@ -1,14 +1,17 @@
 import asyncio
 import logging
+import random
 from concurrent.futures import ThreadPoolExecutor
 from importlib import import_module
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
+import networkx as nx
 import orjson
 
-from .constants import GRAPH_ROOT, Compressor, compressor_extensions
-from .models import GraphInfo
+from .constants import GRAPH_ROOT, HTTPS_SCHEME, Compressor, compressor_extensions
+from .dependencies import GraphResolver
+from .models import GraphInfo, Node
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -67,14 +70,35 @@ class GraphInfoUpdater(GraphManager):
         super().__init__(compressor, processes)
         self.graph_info: Dict[str, GraphInfo] = dict()
 
+    def _load_nxgraph(self, graph: Path) -> nx.Graph:
+        """Return the graph data structure from url for further analysis"""
+        resolver = GraphResolver(HTTPS_SCHEME + graph.stem)
+        return resolver(self.compressor, True)
+
+    def _find_teleport_nodes(self, graph: Path) -> List[Node]:
+        """Create a random selection of teleportation nodes on application startup.
+        This would be a subset of nodes with a degree of 1.
+        """
+        G = self._load_nxgraph(graph)
+        total_teleport_nodes = [
+            Node(id=node) for node in G.nodes() if G.degree(node) == 1
+        ]
+        limit = len(total_teleport_nodes) // 100
+        return random.sample(total_teleport_nodes, limit)
+
     def _update_graph_info(self, graph: Path) -> None:
         """Resolve graph information"""
         compressor_module = import_module(self.compressor.value)
         with compressor_module.open(graph, "rb") as f:
             data = orjson.loads(f.read())
-            self.graph_info[graph.stem] = GraphInfo(
-                num_nodes=len(data["nodes"]), num_edges=len(data["edges"])
-            )
+            try:
+                self.graph_info[graph.stem] = GraphInfo(
+                    num_nodes=len(data["nodes"]),
+                    num_edges=len(data["edges"]),
+                    teleport_nodes=self._find_teleport_nodes(graph),
+                )
+            except Exception as e:
+                logger.error(f"{e} -> {graph.stem}")
 
     def update_info(self, force: bool = False) -> None:
         """Update graph info in app state"""
