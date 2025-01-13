@@ -67,7 +67,7 @@ async def course_begin(
     )
 
 
-@router.get("/get-neighbourhood", response_model=AdjList)
+@router.post("/get-neighbourhood", response_model=AdjList)
 async def get_node_neighbourhood(
     request: Request,
     uid: str,
