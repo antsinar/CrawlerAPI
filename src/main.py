@@ -38,6 +38,9 @@ async def lifespan(app: FastAPI):
         environment = environ.get("ENV", "development")
         GRAPH_ROOT.mkdir(exist_ok=True)
         task_queue = TaskQueue(capacity=1)
+        app.state.task_queue = task_queue
+        app.state.compressor = Compressor.GZIP
+        app.state.environment = environment
         cleaner = GraphCleaner(app.state.compressor)
         info_updater = GraphInfoUpdater(app.state.compressor)
         watchdog = GraphWatcher(app.state.compressor)
@@ -48,13 +51,10 @@ async def lifespan(app: FastAPI):
                     loop, [cleaner.sweep, info_updater.update_info]
                 )
             )
-        processor = asyncio.create_task(task_queue.process_queue())
-        asyncio.create_task(watchdog.watch_graphs(cleaner, info_updater))
-        app.state.task_queue = task_queue
-        app.state.compressor = Compressor.GZIP
-        app.state.environment = environment
         app.state.info_updater = info_updater
         app.state.active_courses = dict()
+        processor = asyncio.create_task(task_queue.process_queue())
+        asyncio.create_task(watchdog.watch_graphs(cleaner, info_updater))
         yield
     except Exception as e:
         pass
@@ -80,6 +80,7 @@ async def append_new_course_to_app_state(request: Request, call_next):
     if request.method == "POST" and request.url.path == "/course/begin":
         req_body = await request.json()
         app.state.active_courses[req_body["course"]["uid"]] = req_body["course"]["url"]
+    return await call_next(request)
 
 
 @app.middleware("http")
