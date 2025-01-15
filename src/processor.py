@@ -30,7 +30,7 @@ class TaskQueue:
         while self.is_available:
             if self.capacity < 1:
                 logger.info("Waiting for empty slot in Executor")
-                await asyncio.sleep(1)
+                # await asyncio.sleep(1)
                 continue
             url = await self.queue.get()
             self.capacity -= 1
