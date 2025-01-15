@@ -38,11 +38,11 @@ async def lifespan(app: FastAPI):
     try:
         load_dotenv(find_dotenv(".env"))
         environment = environ.get("ENV", "development")
-        GRAPH_ROOT.mkdir(exist_ok=True)
-        task_queue = TaskQueue(capacity=1)
-        app.state.task_queue = task_queue
-        app.state.compressor = Compressor.GZIP
+        app.state.compressor = Compressor.LZMA
         app.state.environment = environment
+        GRAPH_ROOT.mkdir(exist_ok=True)
+        task_queue = TaskQueue(compressor=app.state.compressor, capacity=1)
+        app.state.task_queue = task_queue
         cleaner = GraphCleaner(app.state.compressor)
         info_updater = GraphInfoUpdater(app.state.compressor)
         watchdog = GraphWatcher(app.state.compressor)
