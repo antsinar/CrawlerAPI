@@ -3,6 +3,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 
+from .constants import Compressor
 from .lib import process_url
 
 logging.basicConfig(level=logging.INFO)
@@ -10,11 +11,12 @@ logger = logging.getLogger(__name__)
 
 
 class TaskQueue:
-    def __init__(self, capacity: int = 1):
+    def __init__(self, compressor: Compressor, capacity: int = 1):
         self.queue = asyncio.Queue()
         self.pool = ThreadPoolExecutor(max_workers=1)
         self.is_available: bool = True
         self.capacity: int = capacity
+        self.compressor: Compressor = compressor
 
     def get_size(self) -> int:
         return self.queue.qsize()
@@ -42,7 +44,7 @@ class TaskQueue:
 
     def _process_url(self, url: str):
         """Runs the processing function"""
-        asyncio.run(process_url(url))
+        asyncio.run(process_url(url, self.compressor))
 
     async def stop(self):
         """Graceful shutdown of the task queue and executor;
