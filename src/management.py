@@ -80,11 +80,9 @@ class GraphInfoUpdater(GraphManager):
         This would be a subset of nodes with a degree of 1.
         """
         G = self._load_nxgraph(graph)
-        total_teleport_nodes = [
-            Node(id=node) for node in G.nodes() if G.degree(node) == 1
-        ]
+        total_teleport_nodes = [node for node in G.nodes() if G.degree(node) == 1]
         limit = len(total_teleport_nodes) // 100
-        return random.sample(total_teleport_nodes, limit)
+        return [Node(id=node) for node in random.sample(total_teleport_nodes, limit)]
 
     def _update_graph_info(self, graph: Path) -> None:
         """Resolve graph information"""
@@ -141,5 +139,7 @@ class GraphWatcher(GraphManager):
                         )
                     )
                 last_modified = GRAPH_ROOT.stat().st_mtime
-            except* PermissionError as p:
-                logger.error(p)
+            except* PermissionError as group:
+                logger.error(str(group.exceptions[-1]))
+            except* EOFError as group:
+                logger.error(str(group.exceptions[-1]))
