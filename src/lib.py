@@ -13,8 +13,15 @@ import networkx as nx
 import orjson
 from httpx import AsyncClient, AsyncHTTPTransport, HTTPStatusError, RequestError
 from lxml import html
+from lxml.cssselect import CSSSelector
 
-from .constants import GRAPH_ROOT, Compressor, compressor_extensions
+from .constants import (
+    GRAPH_ROOT,
+    Compressor,
+    ConcurrentRequestLimit,
+    CrawlDepth,
+    compressor_extensions,
+)
 from .models import AdjList, Node
 
 logging.basicConfig(level=logging.INFO)
@@ -80,6 +87,8 @@ class Crawler:
         if not await self.pre_crawl_setup(start_url):
             return
 
+        anchor_selector = CSSSelector("a[href]")
+
         async def crawl(
             crawler: Crawler,
             url: str,
@@ -91,10 +100,12 @@ class Crawler:
             if depth > crawler.max_depth or url in visited:
                 return
 
-            p = urlparse(url).path
+            p = urlparse(url, allow_fragments=False).path
             logger.info(f"Crawling: {p}")
             visited.add(url)
             crawler.graph.add_node(url)
+
+            # TODO: check against exclusion list before the GET request -- Faster overall than a head request
 
             try:
                 async with semaphore:
@@ -111,10 +122,10 @@ class Crawler:
 
                 tree = html.document_fromstring(response.text)
 
-                for href in tree.cssselect("a[href]"):
+                for href in anchor_selector(tree):
                     full_url = urljoin(url, href.attrib["href"], allow_fragments=False)
-                    next_url = urlparse(full_url)
-                    if "/#" in next_url.path:
+                    next_url = urlparse(full_url, allow_fragments=False)
+                    if "cdn-cgi" in next_url.path:
                         return
                     if next_url.netloc == urlparse(start_url).netloc:
                         crawler.graph.add_edge(url, full_url)
@@ -126,10 +137,16 @@ class Crawler:
         try:
             async with asyncio.TaskGroup() as tg:
                 tg.create_task(crawl(self, start_url, 0))
-        except* ValueError as IPError:
-            logger.error("Terminating due to error", IPError)
-        except* KeyError as HeaderMissingError:
-            logger.error("Terminating due to error", HeaderMissingError)
+        except* ValueError as IPErrorGroup:
+            logger.error(
+                "Terminating due to error",
+                *[str(e)[:100] for e in IPErrorGroup.exceptions],
+            )
+        except* KeyError as HeaderMissingErrorGroup:
+            logger.error(
+                "Terminating due to error",
+                *[str(e)[:50] for e in HeaderMissingErrorGroup.exceptions],
+            )
         return
 
     async def compress_graph(
@@ -183,7 +200,12 @@ async def generate_client(
         await client.aclose()
 
 
-async def process_url(url: str, compressor: Compressor = Compressor.GZIP) -> None:
+async def process_url(
+    url: str,
+    compressor: Compressor,
+    crawl_depth: CrawlDepth,
+    request_limit: ConcurrentRequestLimit,
+) -> None:
     """Function to run from the task queue to process a url and compress the graph
     Contains all necessary steps to crawl a website and save a graph to disk in a
     compressed format
@@ -193,7 +215,11 @@ async def process_url(url: str, compressor: Compressor = Compressor.GZIP) -> Non
     """
     compressor_module = import_module(compressor.value)
     async with generate_client(url) as client:
-        crawler = Crawler(client=client, max_depth=10, semaphore_size=30)
+        crawler = Crawler(
+            client=client,
+            max_depth=crawl_depth.value,
+            semaphore_size=request_limit.value,
+        )
         await crawler.parse_robotsfile()
         logger.info("Crawling Website")
         await crawler.build_graph(url)
