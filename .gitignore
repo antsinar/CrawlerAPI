@@ -3,3 +3,4 @@ __pycache__/
 graphs/
 logs/
 .env
+*.in
