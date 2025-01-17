@@ -128,7 +128,7 @@ class GraphWatcher(GraphManager):
         loop = asyncio.get_event_loop()
         while self.available:
             if last_modified == GRAPH_ROOT.stat().st_mtime:
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.1)
                 continue
             logger.info("Detected change inside the graph directory")
             try:
@@ -139,7 +139,7 @@ class GraphWatcher(GraphManager):
                         )
                     )
                 last_modified = GRAPH_ROOT.stat().st_mtime
-            except* PermissionError as group:
-                logger.error(str(group.exceptions[-1]))
-            except* EOFError as group:
-                logger.error(str(group.exceptions[-1]))
+            except* PermissionError as PermissionErrorGroup:
+                logger.error(*[str(e)[:100] for e in PermissionErrorGroup.exceptions])
+            except* EOFError as EOFGroup:
+                logger.error(*[str(e)[:100] for e in EOFGroup.exceptions])
