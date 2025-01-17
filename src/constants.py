@@ -23,6 +23,18 @@ class MoveOptions(Enum):
     ONE_THOUSAND = 1000
 
 
+class CrawlDepth(Enum):
+    SHALLOW = 5
+    AVERAGE = 8
+    DEEP = 12
+
+
+class ConcurrentRequestLimit(Enum):
+    GENTLE = 10
+    AVERAGE = 20
+    AGGRESIVE = 30
+
+
 difficulty_ranges = {
     Difficulty.EASY: range(50, 1000),
     Difficulty.MEDIUM: range(1000, 10000),

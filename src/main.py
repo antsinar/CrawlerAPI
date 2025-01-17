@@ -13,7 +13,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 from starlette.concurrency import iterate_in_threadpool
 
-from .constants import GRAPH_ROOT, Compressor
+from .constants import GRAPH_ROOT, Compressor, ConcurrentRequestLimit, CrawlDepth
 from .dependencies import (
     get_crawled_urls,
     get_resolver,
@@ -41,7 +41,12 @@ async def lifespan(app: FastAPI):
         app.state.compressor = Compressor.LZMA
         app.state.environment = environment
         GRAPH_ROOT.mkdir(exist_ok=True)
-        task_queue = TaskQueue(compressor=app.state.compressor, capacity=1)
+        task_queue = TaskQueue(
+            compressor=app.state.compressor,
+            capacity=1,
+            crawl_depth=CrawlDepth.AVERAGE,
+            request_limit=ConcurrentRequestLimit.AVERAGE,
+        )
         app.state.task_queue = task_queue
         cleaner = GraphCleaner(app.state.compressor)
         info_updater = GraphInfoUpdater(app.state.compressor)
