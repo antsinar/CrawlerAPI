@@ -2,9 +2,8 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 from importlib import import_module
-from os import environ
 from types import ModuleType
-from typing import AsyncGenerator, Generator, Optional
+from typing import AsyncGenerator, Generator, List, Optional
 from urllib.parse import urljoin, urlparse
 from urllib.robotparser import RobotFileParser
 
@@ -37,6 +36,7 @@ class Crawler:
         self.semaphore_size: int = semaphore_size
         self.robotparser: Optional[RobotFileParser] = None
         self.graph: nx.Graph = nx.Graph()
+        self.exclusion_list: List[str] = [".pdf", ".xml", ".jpg", ".png"]
 
     async def parse_robotsfile(self) -> None:
         """Create a parser instance to check against while crawling"""
@@ -77,6 +77,13 @@ class Crawler:
         )
         return True
 
+    def check_against_exclusion_list(self, path: str) -> bool:
+        """Return True if the path matches a pattern inside the crawler's exclusion list"""
+        for item in self.exclusion_list:
+            if item in path:
+                return True
+        return False
+
     async def build_graph(self, start_url: str) -> None:
         """Function to run from the task queue to process a url and compress the graph
         :param start_url: url to start from
@@ -106,6 +113,8 @@ class Crawler:
             crawler.graph.add_node(url)
 
             # TODO: check against exclusion list before the GET request -- Faster overall than a head request
+            if self.check_against_exclusion_list(p):
+                return
 
             try:
                 async with semaphore:
@@ -178,13 +187,7 @@ async def generate_client(
         "Accept-Encoding": "gzip, deflate, br",
         "Accept-Language": "en, el-GR;q=0.9",
     }
-    in_production = environ.get("ENV", "development") == "production"
-    transport = AsyncHTTPTransport(
-        retries=3,
-        verify=in_production,
-        http2=True,
-        http1=not in_production,
-    )
+    transport = AsyncHTTPTransport(retries=3, http2=True)
     client = AsyncClient(
         base_url=base_url,
         transport=transport,

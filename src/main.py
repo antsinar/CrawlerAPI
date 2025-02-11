@@ -45,7 +45,7 @@ async def lifespan(app: FastAPI):
             compressor=app.state.compressor,
             capacity=1,
             crawl_depth=CrawlDepth.AVERAGE,
-            request_limit=ConcurrentRequestLimit.AVERAGE,
+            request_limit=ConcurrentRequestLimit.AGGRESIVE,
         )
         app.state.task_queue = task_queue
         cleaner = GraphCleaner(app.state.compressor)
