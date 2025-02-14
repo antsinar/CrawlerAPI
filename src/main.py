@@ -28,6 +28,13 @@ from .management import GraphCleaner, GraphInfoUpdater, GraphWatcher
 from .models import AdjList, GraphInfo, NodeInGraph, QueueUrl
 from .processor import TaskQueue
 from .routers.game import router as game_router
+from .storage import (
+    DictCacheRepository,
+    DictLeaderboardRepository,
+    ICacheRepository,
+    ILeaderboardRepository,
+    StorageEngine,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -40,6 +47,10 @@ async def lifespan(app: FastAPI):
         environment = environ.get("ENV", "development")
         app.state.compressor = Compressor.LZMA
         app.state.environment = environment
+        app.state.leaderboardRepository = DictLeaderboardRepository()
+        app.state.cacheRepository = DictCacheRepository(
+            storage_engine=StorageEngine.DICT
+        )
         GRAPH_ROOT.mkdir(exist_ok=True)
         task_queue = TaskQueue(
             compressor=app.state.compressor,
@@ -97,19 +108,6 @@ async def append_new_course_to_app_state(request: Request, call_next):
 
 
 @app.middleware("http")
-async def pass_state_to_request(request: Request, call_next):
-    request.state.compressor = app.state.compressor
-    request.state.environment = app.state.environment
-    request.state.graph_info = app.state.info_updater.graph_info
-    request.state.active_courses = app.state.active_courses
-    if request.method == "POST" and request.url.path in [
-        "/queue-website/",
-    ]:
-        request.state.task_queue = app.state.task_queue
-    return await call_next(request)
-
-
-@app.middleware("http")
 async def redirect_to_maintenance(request: Request, call_next):
     if environ.get("MAINTENANCE", "False") == "False":
         return await call_next(request)
@@ -128,7 +126,7 @@ async def root(request: Request):
     """Redirect to docs, if not in production"""
     return (
         RedirectResponse(url="/docs")
-        if request.state.environment != "production"
+        if request.app.state.environment != "production"
         else RedirectResponse(url="/graphs/all")
     )
 
@@ -150,10 +148,10 @@ async def graph_info(
 ):
     """Return graph information, if present"""
     try:
-        return request.state.graph_info[urlparse(url).netloc]
+        return request.app.state.graph_info[urlparse(url).netloc]
     except KeyError:
         logger.info("Computing graph info")
-        G = resolver(request.state.compressor, True)
+        G = resolver(request.app.state.compressor, True)
         return GraphInfo(num_nodes=G.number_of_nodes(), num_edges=G.number_of_edges())
 
 
@@ -167,12 +165,12 @@ async def queue_website(
     """Append website for crawling and return status"""
     if not url_crawled and queue_url.force:
         raise HTTPException(status_code=409, detail="Already Crawled")
-    await request.state.task_queue.push_url(queue_url.url)
+    await request.app.state.task_queue.push_url(queue_url.url)
     return JSONResponse(
         status_code=201,
         content={
             "message": "Queued for Crawling",
-            "position": request.state.task_queue.get_size(),
+            "position": request.app.state.task_queue.get_size(),
         },
     )
 
@@ -184,7 +182,7 @@ async def stream_graph(
     url_crawled: Annotated[None, Depends(url_in_crawled)],
     resolver: Annotated[Callable[[Compressor, bool], nx.Graph], Depends(get_resolver)],
 ) -> StreamingResponse:
-    G: nx.Graph = resolver(request.state.compressor, not url_crawled)
+    G: nx.Graph = resolver(request.app.state.compressor, not url_crawled)
     response = StreamingResponse(
         content=generate_graph(G), media_type="application/json"
     )
@@ -204,7 +202,7 @@ async def get_node_neighborhood(
     :param url: root url of graph
     :param node: Node model instance
     """
-    G = resolver(request.state.compressor, not url_crawled)
+    G = resolver(request.app.state.compressor, not url_crawled)
     neighborhood = get_neighborhood(G, node_in_graph.node)
     if not neighborhood:
         raise HTTPException(status_code=404, detail="Node not found")

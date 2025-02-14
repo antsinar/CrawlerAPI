@@ -36,7 +36,7 @@ async def generate_course_url(
     possible_urls = [
         url
         for url in resolvers.keys()
-        if request.state.graph_info[url].num_nodes in difficulty_range
+        if request.app.state.graph_info[url].num_nodes in difficulty_range
     ]
     random.shuffle(possible_urls)
     return {"url": random.choice(possible_urls)}
@@ -50,7 +50,7 @@ async def course_begin(
     resolver: Annotated[Callable[[Compressor, bool], nx.Graph], Depends(get_resolver)],
 ):
     """Initialize a tracker object for a playable course"""
-    G = resolver(request.state.compressor, True)
+    G = resolver(request.app.state.compressor, True)
     nodes_list = list(G.nodes)
     source = random.choice(nodes_list)
     course = Course(url=url, start_node=Node(id=source), end_node=None)
