@@ -33,7 +33,7 @@ def get_crawled_urls(request: Request) -> List[str]:
         graph.stem
         for graph in GRAPH_ROOT.iterdir()
         if graph.is_file()
-        and graph.suffix == compressor_extensions[request.state.compressor.value]
+        and graph.suffix == compressor_extensions[request.app.state.compressor.value]
     ]
 
 
@@ -162,11 +162,11 @@ async def get_resolver_from_object(
 
 async def resolve_course_url(request: Request, uid: str) -> str:
     """Search the running courses for given course uid and return the url, otherwise raise HTTPExceprion"""
-    if uid not in request.state.active_courses.keys():
+    if uid not in request.app.state.active_courses.keys():
         raise HTTPException(
             status_code=404, detail="ID does not correspond to an active course"
         )
-    return request.state.active_courses[uid]
+    return request.app.state.active_courses[uid]
 
 
 async def resolve_graph_from_course(
