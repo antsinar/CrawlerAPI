@@ -148,7 +148,7 @@ async def graph_info(
 ):
     """Return graph information, if present"""
     try:
-        return request.app.state.graph_info[urlparse(url).netloc]
+        return request.app.state.info_updater.graph_info[urlparse(url).netloc]
     except KeyError:
         logger.info("Computing graph info")
         G = resolver(request.app.state.compressor, True)
