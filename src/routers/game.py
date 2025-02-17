@@ -36,7 +36,7 @@ async def generate_course_url(
     possible_urls = [
         url
         for url in resolvers.keys()
-        if request.app.state.graph_info[url].num_nodes in difficulty_range
+        if request.app.state.info_updater.graph_info[url].num_nodes in difficulty_range
     ]
     random.shuffle(possible_urls)
     return {"url": random.choice(possible_urls)}
