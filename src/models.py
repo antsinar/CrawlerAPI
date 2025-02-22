@@ -1,10 +1,13 @@
+from __future__ import annotations
+
 import random
-from typing import List, Optional
+from enum import Enum
+from typing import Dict, List, Optional
 from uuid import uuid4
 
 from pydantic import BaseModel, Field, PositiveFloat, PositiveInt
 
-from .constants import MoveOptions
+from .constants import MoveOptions, PowerupType, TrapType
 
 
 class Node(BaseModel):
@@ -12,6 +15,10 @@ class Node(BaseModel):
 
     def __str__(self):
         return self.id
+
+
+class NodePoints(Node):
+    points: int = Field(default=10)
 
 
 class AdjList(BaseModel):
@@ -70,10 +77,49 @@ class CoursePathTracker(BaseModel):
     teleport_nodes_used: List[Node] = Field(default_factory=list)
 
 
+class CourseTrap(BaseModel):
+    type: TrapType = Field(default=TrapType.DIZZYNESS)
+    moves_left: int = Field(default=10)
+
+
+class CoursePowerup(BaseModel):
+    type: PowerupType
+    moves_left: int = Field(default=10)
+
+
+class NodePowerup(Node):
+    powerup: CoursePowerup
+
+
+class AdjListPoints(BaseModel):
+    source: NodePoints
+    dest: List[NodePoints | NodePowerup]
+
+
+class CourseModifiersTracker(BaseModel):
+    """Wrapper object for course modifiers"""
+
+    triggered_traps: List[CourseTrap] = Field(default_factory=list)
+    active_powerups: List[CoursePowerup] = Field(default_factory=list)
+
+
+class CourseModifiersHidden(CourseModifiersTracker):
+    """Object generated in course setup, contains all stored course modifiers"""
+
+    traps: Dict[str, CourseTrap]
+    powerups: Dict[str, CoursePowerup]
+
+
 class CourseTracker(BaseModel):
     """Wrapper object for course trackers"""
 
-    course: Course
     move_tracker: CourseMoveTracker
     score_tracker: CourseScoreTracker
     path_tracker: CoursePathTracker
+    modifiers_tracker: CourseModifiersTracker
+
+
+class CourseComplete(Course):
+    """Wrapper around course object to contain all user relevant information"""
+
+    tracker: CourseTracker

@@ -8,7 +8,6 @@ from fastapi import Depends, HTTPException, Request
 from networkx import Graph, node_link_graph
 
 from .constants import GRAPH_ROOT, HTTPS_SCHEME, Compressor, compressor_extensions
-from .models import Course
 
 
 async def validate_url(request: Request) -> None:
@@ -172,8 +171,8 @@ async def resolve_course_url(request: Request, uid: str) -> str:
 async def resolve_graph_from_course(
     request: Request,
     uid: str,
-    course_url: Annotated[Course, Depends(resolve_course_url)],
+    course_url: Annotated[str, Depends(resolve_course_url)],
     resolvers: Annotated[dict[str, GraphResolver], Depends(graph_resolvers)],
 ) -> Callable[[Compressor, bool], Graph]:
     """Determine a course from its uid and return the corresponding graph resolver object"""
-    return resolvers[urlparse(course_url).netloc]
+    return resolvers[urlparse(HTTPS_SCHEME + course_url).netloc]

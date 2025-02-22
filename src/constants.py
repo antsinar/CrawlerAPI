@@ -35,6 +35,18 @@ class ConcurrentRequestLimit(Enum):
     AGGRESIVE = 30
 
 
+class PowerupType(Enum):
+    SIGHT = 0
+    MOVEMENT = 1
+    RESIST = 2
+
+
+class TrapType(Enum):
+    DIZZYNESS = 0
+    INSOMNIA = 1
+    TRIPPINESS = 2
+
+
 difficulty_ranges = {
     Difficulty.EASY: range(50, 1000),
     Difficulty.MEDIUM: range(1000, 10000),

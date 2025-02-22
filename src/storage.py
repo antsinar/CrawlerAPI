@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field, ValidationError
 from pymemcache.client.base import PooledClient
 from pymemcache.exceptions import MemcacheError
 
-from .models import CourseTracker
+from .models import CourseComplete, CourseModifiersHidden, CourseTracker
 
 
 class StorageEngine(Enum):
@@ -182,8 +182,13 @@ def _match_engine(engine: StorageEngine) -> ILeaderboardRepository:
 
 
 class ICacheRepository(Protocol):
-    def get_course(self, course_id: str) -> CourseTracker | None: ...
-    def set_course(self, course_id: str, course: CourseTracker): ...
+    def course_exists(self, course_id: str) -> bool: ...
+    def get_course(self, course_id: str) -> CourseComplete | None: ...
+    def get_course_modifiers(self, course_id: str) -> CourseModifiersHidden | None: ...
+    def set_course(self, course_id: str, course: CourseComplete): ...
+    def set_course_modifiers(
+        self, course_id: str, modifiers: CourseModifiersHidden
+    ) -> None: ...
     def delete_course(self, course_id: str): ...
     def write_to_storage(self, course_id: str): ...
 
@@ -191,16 +196,31 @@ class ICacheRepository(Protocol):
 class DictCacheRepository:
     def __init__(self, storage_engine: StorageEngine):
         self.storage_engine: ILeaderboardRepository = _match_engine(storage_engine)
-        self.client: Dict[str, LeaderboardTracker] = dict()
+        self.client: Dict[str, CourseTracker] = dict()
+        self.client_modifiers: Dict[str, CourseModifiersHidden] = dict()
 
-    def get_course(self, course_id: str) -> CourseTracker | None:
+    def course_exists(self, course_id: str) -> bool:
+        return self.client.get(course_id, None) and self.client_modifiers.get(
+            course_id, None
+        )
+
+    def get_course(self, course_id: str) -> CourseComplete | None:
         return self.client.get(course_id, None)
 
-    def set_course(self, course_id: str, course: CourseTracker) -> None:
+    def get_course_modifiers(self, course_id: str) -> CourseModifiersHidden | None:
+        return self.client_modifiers.get(course_id, None)
+
+    def set_course(self, course_id: str, course: CourseComplete) -> None:
         self.client[course_id] = course
+
+    def set_course_modifiers(
+        self, course_id: str, modifiers: CourseModifiersHidden
+    ) -> None:
+        self.client_modifiers[course_id] = modifiers
 
     def delete_course(self, course_id: str) -> None:
         del self.client[course_id]
+        del self.client_modifiers[course_id]
 
     def write_to_storage(self, course_id: str) -> None:
         tracker = self.client.get(course_id, None)
