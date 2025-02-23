@@ -5,7 +5,7 @@ from typing import Dict
 
 import networkx as nx
 
-from src.constants import Compressor, PowerupType, TrapType
+from src.constants import PowerupType, TrapType
 from src.dependencies import GraphResolver
 from src.models import (
     Course,
@@ -61,23 +61,27 @@ class CourseModHandler:
             powerups_sample = random.sample(
                 sorted(set(furthest_nodes).difference(traps_sample)), self.num_powerups
             )
-        except Exception as e:
-            logger.error("Error discovering furthest nodes")
-            logger.error(e)
+        except nx.NetworkXError as e:
+            logger.error(f"Graph error: {e}")
+            return
+
         try:
             logger.info("creating modifiers")
             [self.create_trap(node) for node in traps_sample]
             [self.create_powerup(node) for node in powerups_sample]
         except Exception as e:
             logger.error(e)
+            return
 
         # set up random traps and powerups on the maximum distance available
         try:
             modifiers = CourseModifiersHidden(traps=self.traps, powerups=self.powerups)
             logger.info("saving modifiers")
             self.cache_storage.set_course_modifiers(self.course.uid, modifiers)
-        except Exception:
+        except Exception as e:
+            logger.error(f"Error saving modifiers in cache: {e}")
             return
+
         logger.info("modifiers ready")
 
 
@@ -98,26 +102,21 @@ def initialize_course(
     try:
         cache_storage.set_course(course.uid, course)
     except Exception as e:
-        logger.error("error in storing course in cache")
-        logger.error(e)
+        logger.error(f"error in storing course in cache: {e}")
         return
-    try:
-        mod_handler = CourseModHandler(
-            Course(
-                uid=course.uid,
-                url=course.url,
-                start_node=course.start_node,
-                end_node=course.end_node,
-            ),
-            graph=graph,
-            cache_storage=cache_storage,
-            num_traps=num_traps,
-            num_powerups=num_powerups,
-        )
-    except Exception as e:
-        logger.error("Error creating mod handler")
-        logger.error(e)
-    logger.info("transition to handler")
+    mod_handler = CourseModHandler(
+        Course(
+            uid=course.uid,
+            url=course.url,
+            start_node=course.start_node,
+            end_node=course.end_node,
+        ),
+        graph=graph,
+        cache_storage=cache_storage,
+        num_traps=num_traps,
+        num_powerups=num_powerups,
+    )
+
     mod_handler.initialize_modifiers(graph)
 
 
