@@ -173,7 +173,7 @@ async def move_into_node(
     G: nx.Graph = resolver(request.app.state.compressor, True)
 
     # check if movement is valid (distance, traps, powerups)
-    if nx.shortest_path(G, current_node.id, target_node.id) != 1:
+    if nx.shortest_path_length(G, current_node.id, target_node.id) != 1:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Nodes are not neighbours"
         )
