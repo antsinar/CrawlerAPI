@@ -161,12 +161,10 @@ async def move_into_node(
         )
 
     # check end condition (move type) -- submits exit node (current node)
-    current_node = (
-        course.tracker.path_tracker.current_node
-        or course.game_state == GameState.FINISHED
-    )
-    if target_node.id == current_node.id:
+    current_node = course.tracker.path_tracker.current_node
+    if target_node.id == current_node.id or course.game_state == GameState.FINISHED:
         course.game_state = GameState.FINISHED
+
         return course
 
     # get course
