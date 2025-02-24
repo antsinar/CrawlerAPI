@@ -78,12 +78,14 @@ class CoursePathTracker(BaseModel):
 
 
 class CourseTrap(BaseModel):
-    type: TrapType = Field(default=TrapType.DIZZYNESS)
+    type: TrapType = Field(default_factory=lambda _: random.choice(list(TrapType)))
     moves_left: int = Field(default=10)
 
 
 class CoursePowerup(BaseModel):
-    type: PowerupType
+    type: PowerupType = Field(
+        default_factory=lambda _: random.choice(list(PowerupType))
+    )
     moves_left: int = Field(default=10)
 
 
@@ -119,7 +121,13 @@ class CourseTracker(BaseModel):
     modifiers_tracker: CourseModifiersTracker
 
 
+class GameState(Enum):
+    IN_PROGRESS = 0
+    FINISHED = 1
+
+
 class CourseComplete(Course):
     """Wrapper around course object to contain all user relevant information"""
 
+    game_state: GameState = Field(default=GameState.IN_PROGRESS)
     tracker: CourseTracker

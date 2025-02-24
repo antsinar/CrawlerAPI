@@ -5,14 +5,16 @@ from typing import Dict
 
 import networkx as nx
 
-from src.constants import PowerupType, TrapType
+from src.constants import SCORE_MULTIPLIER_INCREMENT, PowerupType, TrapType
 from src.dependencies import GraphResolver
 from src.models import (
     Course,
     CourseComplete,
     CourseModifiersHidden,
     CoursePowerup,
+    CourseTracker,
     CourseTrap,
+    Node,
 )
 from src.storage import ICacheRepository
 
@@ -128,3 +130,11 @@ def calc_node_points(G: nx.Graph, start_node: str, neighbour: str) -> int:
     if not path:
         return 0
     return (len(path) - 1) * 10
+
+
+def calc_move_multiplier(tracker: CourseTracker, target_node: Node) -> float:
+    return (
+        tracker.score_tracker.multiplier + SCORE_MULTIPLIER_INCREMENT
+        if target_node not in tracker.path_tracker.movement_path
+        else 1.0
+    )

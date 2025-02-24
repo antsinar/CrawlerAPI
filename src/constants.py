@@ -57,3 +57,6 @@ compressor_extensions = {Compressor.GZIP.value: ".gz", Compressor.LZMA.value: ".
 
 HTTP_SCHEME = "http://"
 HTTPS_SCHEME = "https://"
+
+MAX_TRAPS_TRIGGERED = 3
+SCORE_MULTIPLIER_INCREMENT = 0.1
