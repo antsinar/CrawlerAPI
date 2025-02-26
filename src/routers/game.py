@@ -3,7 +3,7 @@ from typing import Annotated, Callable
 
 import networkx as nx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from src.constants import MAX_TRAPS_TRIGGERED, Compressor, Difficulty, difficulty_ranges
 from src.dependencies import (
@@ -29,8 +29,13 @@ from src.models import (
     NodePoints,
     NodePowerup,
 )
-from src.storage import ICacheRepository
-from src.tasks.game import calc_move_multiplier, calc_node_points, initialize_course
+from src.storage import ICacheRepository, ILeaderboardRepository, LeaderboardTracker
+from src.tasks.game import (
+    calc_move_multiplier,
+    calc_node_points,
+    initialize_course,
+    write_to_leaderboard,
+)
 
 router = APIRouter(prefix="/course")
 
@@ -144,9 +149,9 @@ async def move_into_node(
     uid: str,
     target_node: Node,
     resolver: Annotated[nx.Graph, Depends(resolve_graph_from_course)],
+    tasks: BackgroundTasks,
 ):
     """Move into a node and return the updated course tracker"""
-    # get tracker object and find the current node
     cache_storage: ICacheRepository = request.app.state.cacheRepository
     course = cache_storage.get_course(uid)
     if not course:
@@ -160,23 +165,21 @@ async def move_into_node(
             detail="Unexpected error in cache",
         )
 
-    # check end condition (move type) -- submits exit node (current node)
     current_node = course.tracker.path_tracker.current_node
     if target_node.id == current_node.id or course.game_state == GameState.FINISHED:
         course.game_state = GameState.FINISHED
-
+        tasks.add_task(
+            write_to_leaderboard, request.app.state.leaderboardRepository, course
+        )
         return course
 
-    # get course
     G: nx.Graph = resolver(request.app.state.compressor, True)
 
-    # check if movement is valid (distance, traps, powerups)
     if nx.shortest_path_length(G, current_node.id, target_node.id) != 1:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Nodes are not neighbours"
         )
 
-    # update tracker object (move, path, modifiers)
     course.tracker.move_tracker.moves_taken += 1
     course.tracker.path_tracker.movement_path.append(target_node)
     course.tracker.path_tracker.current_node = target_node
@@ -199,7 +202,6 @@ async def move_into_node(
         calc_node_points(G, course.start_node.id, target_node.id) * multiplier
     )
 
-    # submit tracker and modifiers to cache
     try:
         cache_storage.set_course(course_id=uid, course=course)
         cache_storage.set_course_modifiers(course_id=uid, modifiers=course_modifiers)
@@ -208,7 +210,7 @@ async def move_into_node(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"Error writing to cache, {e}",
         )
-    # check end conditions (traps, moves)
+
     if (
         course.tracker.move_tracker.moves_taken
         == course.tracker.move_tracker.moves_target
@@ -219,11 +221,66 @@ async def move_into_node(
     return course
 
 
-@router.get("/summary")
-async def get_course_summary(request, course_uid: str):
-    # get course from cache
-    # produce course summary
-    # get leaderboard
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Not implemented"
+@router.post("/update-leaderboard")
+async def update_leaderboard(request: Request, course_uid: str, tasks: BackgroundTasks):
+    cache_storage: ICacheRepository = request.app.state.cacheRepository
+    course = cache_storage.get_course(course_uid)
+    if not course:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Course not found in cache",
+            headers={"X-Availability": "Not Available"},
+        )
+    if course.game_state != GameState.FINISHED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Course not yet finished",
+            headers={"X-Availability": "Pending"},
+        )
+    leaderboard_storage: ILeaderboardRepository = (
+        request.app.state.leaderboardRepository
     )
+    if leaderboard_storage.course_exists(
+        course_url=course.url,
+        max_moves=course.tracker.move_tracker.moves_target,
+        course_uid=course_uid,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Course already exists in leaderboard",
+            headers={"X-Availability": "Available"},
+        )
+    tasks.add_task(write_to_leaderboard, leaderboard_storage, course)
+    return JSONResponse(
+        status_code=status.HTTP_201_CREATED, headers={"X-Availability": "Available"}
+    )
+
+
+@router.get("/summary", response_model=LeaderboardTracker)
+async def get_course_summary(request: Request, course_uid: str):
+    cache_storage: ICacheRepository = request.app.state.cacheRepository
+    course = cache_storage.get_course(course_uid)
+    if not course:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Course not in cache"
+        )
+    leaderboard_storage: ILeaderboardRepository = (
+        request.app.state.leaderboardRepository
+    )
+    if not leaderboard_storage.course_exists(
+        course.url, course.tracker.move_tracker.moves_target, course_uid
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Course not found in leaderboard",
+        )
+    tracker: LeaderboardTracker | None = leaderboard_storage.read_tracker_object(
+        course_uid
+    )
+    if not tracker:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Course Tracker not found in storage",
+        )
+
+    return tracker

@@ -1,5 +1,6 @@
 import logging
 import random
+from datetime import datetime
 from functools import cached_property
 from typing import Dict
 
@@ -16,7 +17,13 @@ from src.models import (
     CourseTrap,
     Node,
 )
-from src.storage import ICacheRepository
+from src.storage import (
+    ICacheRepository,
+    ILeaderboardRepository,
+    LeaderboardComplete,
+    LeaderboardDisplay,
+    LeaderboardTracker,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -138,3 +145,28 @@ def calc_move_multiplier(tracker: CourseTracker, target_node: Node) -> float:
         if target_node not in tracker.path_tracker.movement_path
         else 1.0
     )
+
+
+def write_to_leaderboard(
+    leaderboard_handler: ILeaderboardRepository, course: CourseComplete
+) -> None:
+    if leaderboard_handler.course_exists(
+        course.url, course.tracker.move_tracker.moves_target, course.uid
+    ):
+        logger.info("Course already in leaderboard")
+        return
+    logger.info("Initializing leaderboard")
+    leaderboard_handler.init_leaderboard(
+        course.url, course.tracker.move_tracker.moves_target
+    )
+    leaderboard_handler.update_leaderboard(
+        course.url,
+        course.tracker.move_tracker.moves_target,
+        LeaderboardDisplay(
+            nickname=course.nickname,
+            score=course.tracker.score_tracker.points,
+            course_uid=course.uid,
+            stamp=datetime.now().timestamp,
+        ),
+    )
+    leaderboard_handler.queue_tracker_object(LeaderboardComplete(**course.model_dump()))
