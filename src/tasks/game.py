@@ -2,7 +2,7 @@ import logging
 import random
 from datetime import datetime
 from functools import cached_property
-from typing import Dict
+from typing import Dict, List
 
 import networkx as nx
 
@@ -129,17 +129,25 @@ def initialize_course(
     mod_handler.initialize_modifiers(graph)
 
 
-def calc_node_points(G: nx.Graph, start_node: str, neighbour: str) -> int:
+def calc_node_points(
+    G: nx.Graph, start_node: str, neighbour: str, teleport_nodes: List[str] = list()
+) -> int:
     """calculate node points based on the distance from spawn
     Increase points by 10 for every hop required
     """
     path = nx.shortest_path(G, source=start_node, target=neighbour)
     if not path:
         return 0
+    if neighbour in teleport_nodes:
+        return 0
     return (len(path) - 1) * 10
 
 
-def calc_move_multiplier(tracker: CourseTracker, target_node: Node) -> float:
+def calc_move_multiplier(
+    tracker: CourseTracker, target_node: Node, teleport_nodes: List[str] = list()
+) -> float:
+    if target_node.id in teleport_nodes:
+        return tracker.score_tracker.multiplier
     return (
         tracker.score_tracker.multiplier + SCORE_MULTIPLIER_INCREMENT
         if target_node not in tracker.path_tracker.movement_path

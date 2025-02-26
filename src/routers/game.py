@@ -1,11 +1,18 @@
 import random
-from typing import Annotated, Callable
+from typing import Annotated, Callable, Dict, List
+from urllib.parse import urlparse
 
 import networkx as nx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse
 
-from src.constants import MAX_TRAPS_TRIGGERED, Compressor, Difficulty, difficulty_ranges
+from src.constants import (
+    HTTPS_SCHEME,
+    MAX_TRAPS_TRIGGERED,
+    Compressor,
+    Difficulty,
+    difficulty_ranges,
+)
 from src.dependencies import (
     GraphResolver,
     get_resolver,
@@ -120,12 +127,24 @@ async def get_node_neighbourhood(
     # trap nodes are hidden
     powerup_nodes = [*modifiers.powerups.keys()]
     active_modifiers = [*modifiers.triggered_traps, *modifiers.active_powerups]
+    teleport_nodes: List[str] = list()
+    try:
+        teleport_nodes = [
+            node.id
+            for node in request.app.state.info_updater.graph_info[
+                HTTPS_SCHEME + course.url
+            ].teleport_nodes
+        ]
+    except KeyError:
+        pass
     adj_list = AdjListPoints(
         source=NodePoints(id=current_node.id, points=0),
         dest=[
             NodePoints(
                 id=neighbour,
-                points=calc_node_points(G, course.start_node.id, neighbour),
+                points=calc_node_points(
+                    G, course.start_node.id, neighbour, teleport_nodes
+                ),
             )
             for neighbour in G.neighbors(current_node.id)
             if neighbour not in powerup_nodes
@@ -137,7 +156,6 @@ async def get_node_neighbourhood(
             for key, value in modifiers.powerups.items()
         ]
     )
-
     # TODO: add trap or powerup effect
 
     return adj_list
@@ -182,7 +200,25 @@ async def move_into_node(
 
     course.tracker.move_tracker.moves_taken += 1
     course.tracker.path_tracker.movement_path.append(target_node)
-    course.tracker.path_tracker.current_node = target_node
+    teleport_nodes: List[str] = list()
+    try:
+        teleport_nodes = [
+            node.id
+            for node in request.app.state.info_updater.graph_info[
+                HTTPS_SCHEME + course.url
+            ].teleport_nodes
+        ]
+    except KeyError:
+        pass
+
+    if target_node.id in teleport_nodes:
+        new_node = Node(id=random.choice(teleport_nodes))
+        course.tracker.path_tracker.teleport_nodes_used.append(target_node)
+        course.tracker.path_tracker.movement_path.append(new_node)
+        course.tracker.path_tracker.current_node = new_node
+    else:
+        course.tracker.path_tracker.current_node = target_node
+
     course.tracker.modifiers_tracker.active_powerups = [
         CoursePowerup(type=powerup.type, moves_left=powerup.moves_left - 1)
         for powerup in course.tracker.modifiers_tracker.active_powerups
@@ -196,10 +232,11 @@ async def move_into_node(
     # gather node effect (points, trap, powerup)
     # TODO: Add trap effect
     # TODO: Add powerup effect
-    multiplier = calc_move_multiplier(course.tracker, target_node)
+    multiplier = calc_move_multiplier(course.tracker, target_node, teleport_nodes)
     course.tracker.score_tracker.multiplier = multiplier
     course.tracker.score_tracker.points += (
-        calc_node_points(G, course.start_node.id, target_node.id) * multiplier
+        calc_node_points(G, course.start_node.id, target_node.id, teleport_nodes)
+        * multiplier
     )
 
     try:
@@ -284,3 +321,17 @@ async def get_course_summary(request: Request, course_uid: str):
         )
 
     return tracker
+
+
+@router.get("/get-teleport-nodes", response_model=Dict[str, List[Node]])
+async def get_teleport_nodes(request: Request, course_url: str):
+    try:
+        return {
+            "teleport_nodes": request.app.state.info_updater.graph_info[
+                urlparse(course_url).netloc
+            ]
+        }
+    except KeyError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Course url not available"
+        )
