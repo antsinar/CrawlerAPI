@@ -129,5 +129,10 @@ class GameState(Enum):
 class CourseComplete(Course):
     """Wrapper around course object to contain all user relevant information"""
 
+    nickname: str = Field(
+        default_factory=lambda _: "".join(
+            [chr(random.randrange(65, 90)) for _ in range(3)]
+        )
+    )
     game_state: GameState = Field(default=GameState.IN_PROGRESS)
     tracker: CourseTracker
