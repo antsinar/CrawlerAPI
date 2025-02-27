@@ -174,7 +174,8 @@ def write_to_leaderboard(
             nickname=course.nickname,
             score=course.tracker.score_tracker.points,
             course_uid=course.uid,
-            stamp=datetime.now().timestamp,
+            stamp=datetime.strftime(datetime.now(), "%H:%M:%S @ %d/%m/%Y"),
         ),
     )
+    logger.info("Updated leaderboard successfully")
     leaderboard_handler.queue_tracker_object(LeaderboardComplete(**course.model_dump()))

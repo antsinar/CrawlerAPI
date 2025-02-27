@@ -100,7 +100,7 @@ class DictLeaderboardRepository:
         self.trackers: Dict[str, LeaderboardTracker] = dict()
 
     def init_leaderboard(self, course_url: str, moves: int) -> None:
-        leaderboard_key = LeaderboardName(course_url, moves).key
+        leaderboard_key = LeaderboardName(course_url=course_url, moves=moves).key
         if leaderboard_key in self.leaderboards.keys():
             return
         self.leaderboards[leaderboard_key] = list()
@@ -109,7 +109,7 @@ class DictLeaderboardRepository:
         self, course_url: str, max_moves: int, start: int = 0, limit: int | None = 100
     ) -> List[LeaderboardDisplay]:
         leaderboard = self.leaderboards.get(
-            LeaderboardName(course_url, max_moves).key, []
+            LeaderboardName(course_url=course_url, moves=max_moves).key, []
         )
         if not leaderboard:
             return []
@@ -118,7 +118,7 @@ class DictLeaderboardRepository:
         return leaderboard[start : start + limit]
 
     def drop_leaderboard(self, course_url: str, max_moves: int) -> None:
-        key = LeaderboardName(course_url, max_moves).key
+        key = LeaderboardName(course_url=course_url, moves=max_moves).key
         leaderboard = self.leaderboards.get(key, [])
         if not leaderboard:
             return
@@ -133,7 +133,9 @@ class DictLeaderboardRepository:
     def update_leaderboard(
         self, course_url: str, max_moves: int, entry: LeaderboardDisplay
     ) -> None:
-        self.leaderboards[LeaderboardName(course_url, max_moves).key].append(entry)
+        self.leaderboards[
+            LeaderboardName(course_url=course_url, moves=max_moves).key
+        ].append(entry)
         self._sort_leaderboard(course_url, max_moves)
 
     def course_exists(self, course_url: str, max_moves: int, course_uid: str) -> bool:
@@ -150,7 +152,7 @@ class DictLeaderboardRepository:
         self.write_tracker_object(entry)
 
     def write_tracker_object(self, entry: LeaderboardComplete) -> None:
-        key = f"{entry.course.url}:{entry.max_moves}:{entry.uid}"
+        key = f"{entry.url}:{entry.tracker.move_tracker.moves_target}:{entry.uid}"
         self.trackers[key] = entry.tracker
 
     def read_tracker_object(self, course_id: str) -> LeaderboardTracker | None:
@@ -187,7 +189,7 @@ class DictLeaderboardRepository:
         del self.trackers[list(trackers.keys())[-1]]
 
     def _sort_leaderboard(self, course_url: str, max_moves: int) -> None:
-        _key = LeaderboardName(course_url, max_moves).key
+        _key = LeaderboardName(course_url=course_url, moves=max_moves).key
         leaderboard = self.leaderboards.get(_key, list())
         self.leaderboards[_key] = sorted(
             leaderboard, key=lambda x: x.score, reverse=True

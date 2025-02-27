@@ -1,6 +1,5 @@
 import random
-from typing import Annotated, Callable, Dict, List
-from urllib.parse import urlparse
+from typing import Annotated, Callable, List
 
 import networkx as nx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
@@ -99,8 +98,8 @@ async def course_begin(
     return course
 
 
-@router.post("/get-neighbourhood", response_model=AdjListPoints)
-async def get_node_neighbourhood(
+@router.post("/get-neighborhood", response_model=AdjListPoints)
+async def get_node_neighborhood(
     request: Request,
     uid: str,
     current_node: Node,
@@ -141,13 +140,13 @@ async def get_node_neighbourhood(
         source=NodePoints(id=current_node.id, points=0),
         dest=[
             NodePoints(
-                id=neighbour,
+                id=neighbor,
                 points=calc_node_points(
-                    G, course.start_node.id, neighbour, teleport_nodes
+                    G, course.start_node.id, neighbor, teleport_nodes
                 ),
             )
-            for neighbour in G.neighbors(current_node.id)
-            if neighbour not in powerup_nodes
+            for neighbor in G.neighbors(current_node.id)
+            if neighbor not in powerup_nodes
         ],
     )
     adj_list.dest.extend(
@@ -196,7 +195,7 @@ async def move_into_node(
 
     if nx.shortest_path_length(G, current_node.id, target_node.id) != 1:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Nodes are not neighbours"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Nodes are not neighbors"
         )
 
     course.tracker.move_tracker.moves_taken += 1
@@ -263,9 +262,9 @@ async def move_into_node(
 
 
 @router.post("/update-leaderboard")
-async def update_leaderboard(request: Request, course_uid: str, tasks: BackgroundTasks):
+async def update_leaderboard(request: Request, uid: str, tasks: BackgroundTasks):
     cache_storage: ICacheRepository = request.app.state.cacheRepository
-    course = cache_storage.get_course(course_uid)
+    course = cache_storage.get_course(uid)
     if not course:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -284,7 +283,7 @@ async def update_leaderboard(request: Request, course_uid: str, tasks: Backgroun
     if leaderboard_storage.course_exists(
         course_url=course.url,
         max_moves=course.tracker.move_tracker.moves_target,
-        course_uid=course_uid,
+        course_uid=uid,
     ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -293,14 +292,16 @@ async def update_leaderboard(request: Request, course_uid: str, tasks: Backgroun
         )
     tasks.add_task(write_to_leaderboard, leaderboard_storage, course)
     return JSONResponse(
-        status_code=status.HTTP_201_CREATED, headers={"X-Availability": "Available"}
+        status_code=status.HTTP_201_CREATED,
+        headers={"X-Availability": "Available"},
+        content={"message": "Adding course to leaderboard"},
     )
 
 
 @router.get("/summary", response_model=LeaderboardTracker)
-async def get_course_summary(request: Request, course_uid: str):
+async def get_course_summary(request: Request, uid: str):
     cache_storage: ICacheRepository = request.app.state.cacheRepository
-    course = cache_storage.get_course(course_uid)
+    course = cache_storage.get_course(uid)
     if not course:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Course not in cache"
@@ -309,15 +310,13 @@ async def get_course_summary(request: Request, course_uid: str):
         request.app.state.leaderboardRepository
     )
     if not leaderboard_storage.course_exists(
-        course.url, course.tracker.move_tracker.moves_target, course_uid
+        course.url, course.tracker.move_tracker.moves_target, uid
     ):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Course not found in leaderboard",
         )
-    tracker: LeaderboardTracker | None = leaderboard_storage.read_tracker_object(
-        course_uid
-    )
+    tracker: LeaderboardTracker | None = leaderboard_storage.read_tracker_object(uid)
     if not tracker:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -325,17 +324,3 @@ async def get_course_summary(request: Request, course_uid: str):
         )
 
     return tracker
-
-
-@router.get("/get-teleport-nodes", response_model=Dict[str, List[Node]])
-async def get_teleport_nodes(request: Request, course_url: str):
-    try:
-        return {
-            "teleport_nodes": request.app.state.info_updater.graph_info[
-                urlparse(course_url).netloc
-            ]
-        }
-    except KeyError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Course url not available"
-        )

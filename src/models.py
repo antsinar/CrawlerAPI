@@ -65,8 +65,8 @@ class CourseMoveTracker(BaseModel):
 class CourseScoreTracker(BaseModel):
     """Maintain track of points scored throughout the user play session"""
 
-    points: PositiveInt = Field(default=0)
-    multiplier: PositiveFloat = Field(default=1.0, decimal_places=2)
+    points: float = Field(default=0.0)
+    multiplier: float = Field(default=1.0)
 
 
 class CoursePathTracker(BaseModel):
