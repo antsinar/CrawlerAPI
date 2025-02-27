@@ -100,9 +100,7 @@ async def append_new_course_to_app_state(request: Request, call_next):
         resp_body = [chunk async for chunk in response.body_iterator]
         response.body_iterator = iterate_in_threadpool(iter(resp_body))
         resp_body = orjson.loads(resp_body[0])
-        app.state.active_courses[resp_body["course"]["uid"]] = urlparse(
-            resp_body["course"]["url"]
-        ).netloc
+        app.state.active_courses[resp_body["uid"]] = urlparse(resp_body["url"]).netloc
         return response
     return await call_next(request)
 
@@ -148,7 +146,7 @@ async def graph_info(
 ):
     """Return graph information, if present"""
     try:
-        return request.app.state.graph_info[urlparse(url).netloc]
+        return request.app.state.info_updater.graph_info[urlparse(url).netloc]
     except KeyError:
         logger.info("Computing graph info")
         G = resolver(request.app.state.compressor, True)

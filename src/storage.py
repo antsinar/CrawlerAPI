@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field, ValidationError
 from pymemcache.client.base import PooledClient
 from pymemcache.exceptions import MemcacheError
 
-from .models import CourseTracker
+from .models import CourseComplete, CourseModifiersHidden, CourseTracker
 
 
 class StorageEngine(Enum):
@@ -38,13 +38,17 @@ class LeaderboardTracker(CourseTracker):
     pass
 
 
+class LeaderboardComplete(CourseComplete):
+    pass
+
+
 class ILeaderboardRepository(Protocol):
-    def init_leaderboard(self, course_url: str, moves: int):
+    def init_leaderboard(self, course_url: str, moves: int) -> None:
         """Create a new leaderboard for a course url and move combination"""
         ...
 
     def query_leaderboard(
-        self, course_url: str, max_moves: int, start: int = 0, limit: int = 100
+        self, course_url: str, max_moves: int, start: int = 0, limit: int | None = 100
     ) -> List[LeaderboardDisplay]:
         """Return the leaderboard for a course url and move combination for a given range"""
         ...
@@ -63,11 +67,15 @@ class ILeaderboardRepository(Protocol):
         """Add an entry to a leaderboard"""
         ...
 
-    def queue_tracker_object(self, tracker: LeaderboardTracker) -> None:
+    def course_exists(self, course_url: str, max_moves: int, course_uid: str) -> bool:
+        """Query leaderboards to find a course uid from Display objects"""
+        ...
+
+    def queue_tracker_object(self, entry: LeaderboardComplete) -> None:
         """Dump tracker object to permanent storage"""
         ...
 
-    def write_tracker_object(self, tracker: LeaderboardTracker) -> None:
+    def write_tracker_object(self, entry: LeaderboardComplete) -> None:
         """Dump tracker object to permanent storage"""
         ...
 
@@ -76,7 +84,7 @@ class ILeaderboardRepository(Protocol):
         ...
 
     def query_course_trackers(
-        self, course_url: str, max_moves: int, start: int = 0, limit: int = 100
+        self, course_url: str, max_moves: int, start: int = 0, limit: int | None = 100
     ) -> List[LeaderboardTracker]:
         """Return the tracker objects for a course url and move combination for a given range"""
         ...
@@ -91,21 +99,26 @@ class DictLeaderboardRepository:
         self.leaderboards: Dict[str, List[LeaderboardDisplay]] = dict()
         self.trackers: Dict[str, LeaderboardTracker] = dict()
 
-    def init_leaderboard(self, course_url: str, moves: int):
-        self.leaderboards[LeaderboardName(course_url, moves).key] = list()
+    def init_leaderboard(self, course_url: str, moves: int) -> None:
+        leaderboard_key = LeaderboardName(course_url=course_url, moves=moves).key
+        if leaderboard_key in self.leaderboards.keys():
+            return
+        self.leaderboards[leaderboard_key] = list()
 
     def query_leaderboard(
-        self, course_url: str, max_moves: int, start: int = 0, limit: int = 100
+        self, course_url: str, max_moves: int, start: int = 0, limit: int | None = 100
     ) -> List[LeaderboardDisplay]:
         leaderboard = self.leaderboards.get(
-            LeaderboardName(course_url, max_moves).key, []
+            LeaderboardName(course_url=course_url, moves=max_moves).key, []
         )
         if not leaderboard:
             return []
+        if not limit:
+            return leaderboard[start:]
         return leaderboard[start : start + limit]
 
     def drop_leaderboard(self, course_url: str, max_moves: int) -> None:
-        key = LeaderboardName(course_url, max_moves).key
+        key = LeaderboardName(course_url=course_url, moves=max_moves).key
         leaderboard = self.leaderboards.get(key, [])
         if not leaderboard:
             return
@@ -120,15 +133,27 @@ class DictLeaderboardRepository:
     def update_leaderboard(
         self, course_url: str, max_moves: int, entry: LeaderboardDisplay
     ) -> None:
-        self.leaderboards[LeaderboardName(course_url, max_moves).key].append(entry)
+        self.leaderboards[
+            LeaderboardName(course_url=course_url, moves=max_moves).key
+        ].append(entry)
         self._sort_leaderboard(course_url, max_moves)
 
-    def queue_tracker_object(self, tracker: LeaderboardTracker) -> None:
-        self.write_tracker_object(tracker)
+    def course_exists(self, course_url: str, max_moves: int, course_uid: str) -> bool:
+        return course_uid in [
+            display.course_uid
+            for display in self.query_leaderboard(
+                course_url=course_url,
+                max_moves=max_moves,
+                limit=None,
+            )
+        ]
 
-    def write_tracker_object(self, tracker: LeaderboardTracker) -> None:
-        key = f"{tracker.course.url}:{tracker.max_moves}:{tracker.uid}"
-        self.trackers[key] = tracker
+    def queue_tracker_object(self, entry: LeaderboardComplete) -> None:
+        self.write_tracker_object(entry)
+
+    def write_tracker_object(self, entry: LeaderboardComplete) -> None:
+        key = f"{entry.url}:{entry.tracker.move_tracker.moves_target}:{entry.uid}"
+        self.trackers[key] = entry.tracker
 
     def read_tracker_object(self, course_id: str) -> LeaderboardTracker | None:
         trackers = {
@@ -141,14 +166,17 @@ class DictLeaderboardRepository:
         return trackers[list(trackers.keys())[-1]]
 
     def query_course_trackers(
-        self, course_url: str, max_moves: int, start: int = 0, limit: int = 100
+        self, course_url: str, max_moves: int, start: int = 0, limit: int | None = 100
     ) -> List[LeaderboardTracker]:
-        return [
+        trackers = [
             tracker
             for tracker_key, tracker in self.trackers.items()
             if course_url == tracker_key.split(":")[0]
             and max_moves == int(tracker_key.split(":")[1])
-        ][start : start + limit]
+        ]
+        if not limit:
+            return trackers[start:]
+        return trackers[start : start + limit]
 
     def delete_tracker_object(self, course_id: str) -> None:
         trackers = {
@@ -161,8 +189,8 @@ class DictLeaderboardRepository:
         del self.trackers[list(trackers.keys())[-1]]
 
     def _sort_leaderboard(self, course_url: str, max_moves: int) -> None:
-        _key = LeaderboardName(course_url, max_moves).key
-        leaderboard = self.leaderboards.get(_key, [])
+        _key = LeaderboardName(course_url=course_url, moves=max_moves).key
+        leaderboard = self.leaderboards.get(_key, list())
         self.leaderboards[_key] = sorted(
             leaderboard, key=lambda x: x.score, reverse=True
         )
@@ -182,8 +210,13 @@ def _match_engine(engine: StorageEngine) -> ILeaderboardRepository:
 
 
 class ICacheRepository(Protocol):
-    def get_course(self, course_id: str) -> CourseTracker | None: ...
-    def set_course(self, course_id: str, course: CourseTracker): ...
+    def course_exists(self, course_id: str) -> bool: ...
+    def get_course(self, course_id: str) -> CourseComplete | None: ...
+    def get_course_modifiers(self, course_id: str) -> CourseModifiersHidden | None: ...
+    def set_course(self, course_id: str, course: CourseComplete): ...
+    def set_course_modifiers(
+        self, course_id: str, modifiers: CourseModifiersHidden
+    ) -> None: ...
     def delete_course(self, course_id: str): ...
     def write_to_storage(self, course_id: str): ...
 
@@ -191,16 +224,31 @@ class ICacheRepository(Protocol):
 class DictCacheRepository:
     def __init__(self, storage_engine: StorageEngine):
         self.storage_engine: ILeaderboardRepository = _match_engine(storage_engine)
-        self.client: Dict[str, LeaderboardTracker] = dict()
+        self.client: Dict[str, CourseTracker] = dict()
+        self.client_modifiers: Dict[str, CourseModifiersHidden] = dict()
 
-    def get_course(self, course_id: str) -> CourseTracker | None:
+    def course_exists(self, course_id: str) -> bool:
+        return self.client.get(course_id, None) and self.client_modifiers.get(
+            course_id, None
+        )
+
+    def get_course(self, course_id: str) -> CourseComplete | None:
         return self.client.get(course_id, None)
 
-    def set_course(self, course_id: str, course: CourseTracker) -> None:
+    def get_course_modifiers(self, course_id: str) -> CourseModifiersHidden | None:
+        return self.client_modifiers.get(course_id, None)
+
+    def set_course(self, course_id: str, course: CourseComplete) -> None:
         self.client[course_id] = course
+
+    def set_course_modifiers(
+        self, course_id: str, modifiers: CourseModifiersHidden
+    ) -> None:
+        self.client_modifiers[course_id] = modifiers
 
     def delete_course(self, course_id: str) -> None:
         del self.client[course_id]
+        del self.client_modifiers[course_id]
 
     def write_to_storage(self, course_id: str) -> None:
         tracker = self.client.get(course_id, None)

@@ -35,6 +35,18 @@ class ConcurrentRequestLimit(Enum):
     AGGRESIVE = 30
 
 
+class PowerupType(Enum):
+    SIGHT = 0
+    MOVEMENT = 1
+    RESIST = 2
+
+
+class TrapType(Enum):
+    DIZZYNESS = 0
+    INSOMNIA = 1
+    TRIPPINESS = 2
+
+
 difficulty_ranges = {
     Difficulty.EASY: range(50, 1000),
     Difficulty.MEDIUM: range(1000, 10000),
@@ -45,3 +57,6 @@ compressor_extensions = {Compressor.GZIP.value: ".gz", Compressor.LZMA.value: ".
 
 HTTP_SCHEME = "http://"
 HTTPS_SCHEME = "https://"
+
+MAX_TRAPS_TRIGGERED = 3
+SCORE_MULTIPLIER_INCREMENT = 0.1
