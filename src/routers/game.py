@@ -170,6 +170,7 @@ async def move_into_node(
     tasks: BackgroundTasks,
 ):
     """Move into a node and return the updated course tracker"""
+    already_visited: bool = False
     cache_storage: ICacheRepository = request.app.state.cacheRepository
     course = cache_storage.get_course(uid)
     if not course:
@@ -199,6 +200,8 @@ async def move_into_node(
         )
 
     course.tracker.move_tracker.moves_taken += 1
+    if target_node in course.tracker.path_tracker.movement_path:
+        already_visited = True
     course.tracker.path_tracker.movement_path.append(target_node)
     teleport_nodes: List[str] = list()
     try:
@@ -229,15 +232,18 @@ async def move_into_node(
         for trap in course.tracker.modifiers_tracker.triggered_traps
     ]
 
-    # gather node effect (points, trap, powerup)
-    # TODO: Add trap effect
-    # TODO: Add powerup effect
-    multiplier = calc_move_multiplier(course.tracker, target_node, teleport_nodes)
-    course.tracker.score_tracker.multiplier = multiplier
-    course.tracker.score_tracker.points += (
-        calc_node_points(G, course.start_node.id, target_node.id, teleport_nodes)
-        * multiplier
-    )
+    if not already_visited:
+        # gather node effect (points, trap, powerup)
+        # TODO: Add trap effect
+        # TODO: Add powerup effect
+        multiplier = calc_move_multiplier(course.tracker, target_node, teleport_nodes)
+        course.tracker.score_tracker.multiplier = multiplier
+        course.tracker.score_tracker.points += (
+            calc_node_points(G, course.start_node.id, target_node.id, teleport_nodes)
+            * multiplier
+        )
+    else:
+        course.tracker.score_tracker.multiplier = 1.0
 
     try:
         cache_storage.set_course(course_id=uid, course=course)
