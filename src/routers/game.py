@@ -232,18 +232,16 @@ async def move_into_node(
         for trap in course.tracker.modifiers_tracker.triggered_traps
     ]
 
+    multiplier = calc_move_multiplier(course.tracker, target_node, teleport_nodes)
+    course.tracker.score_tracker.multiplier = multiplier
     if not already_visited:
         # gather node effect (points, trap, powerup)
         # TODO: Add trap effect
         # TODO: Add powerup effect
-        multiplier = calc_move_multiplier(course.tracker, target_node, teleport_nodes)
-        course.tracker.score_tracker.multiplier = multiplier
         course.tracker.score_tracker.points += (
             calc_node_points(G, course.start_node.id, target_node.id, teleport_nodes)
             * multiplier
         )
-    else:
-        course.tracker.score_tracker.multiplier = 1.0
 
     try:
         cache_storage.set_course(course_id=uid, course=course)
