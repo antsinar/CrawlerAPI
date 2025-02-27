@@ -118,13 +118,15 @@ async def get_node_neighborhood(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Unexpected cache error",
         )
-    # TODO: check if the node can be searched by the player, according to the tracker object
-    # TODO: check current node
     # TODO: check traps and powerups
-    # TODO: check path
 
     # trap nodes are hidden
-    powerup_nodes = [*modifiers.powerups.keys()]
+    powerup_nodes = [
+        node
+        for node in modifiers.powerups.keys()
+        if node in G.neighbors(current_node.id)
+    ]
+    # powerup_nodes = [*modifiers.powerups.keys()]
     active_modifiers = [*modifiers.triggered_traps, *modifiers.active_powerups]
     teleport_nodes: List[str] = list()
     try:
@@ -150,10 +152,7 @@ async def get_node_neighborhood(
         ],
     )
     adj_list.dest.extend(
-        [
-            NodePowerup(id=key, powerup=value)
-            for key, value in modifiers.powerups.items()
-        ]
+        [NodePowerup(id=key, powerup=modifiers.powerups[key]) for key in powerup_nodes]
     )
     # TODO: add trap or powerup effect
 
