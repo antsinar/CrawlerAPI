@@ -1,7 +1,6 @@
 site_name: Website Explorer Docs
 site_url: https://wesite-explorer-docs.netlify.app/
-repo_url: https://github.com/antsinar/crawlerAPI
-edit_uri: blob/main/docs/
+repo_url: https://github.com/antsinar/crawlerAPI/tree/docs
 repo_name: antsinar/crawlerAPI
 dev_addr: 127.0.0.1:3000
 theme:
@@ -23,7 +22,6 @@ theme:
       accent: deep-orange
   features:
     - header.autohide
-    # - navigation.footer
     - navigation.indexes
     - navigation.tracking
     - navigation.sections
