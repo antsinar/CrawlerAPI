@@ -1,0 +1,62 @@
+site_name: Website Explorer Docs
+site_url: https://wesite-explorer-docs.netlify.app/
+theme:
+  name: material
+  language: el
+  palette:
+    - scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+      primary: amber
+      accent: deep-orange
+
+    - scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+      primary: amber
+      accent: deep-orange
+  features:
+    - header.autohide
+    # - navigation.footer
+    - navigation.indexes
+    - navigation.tracking
+    - navigation.sections
+    - navigation.path
+
+plugins:
+  - privacy
+
+extra:
+  version:
+    provider: mike
+    default:
+      - latest
+      - stable
+    alias: true
+  alternate:
+    - name: Ελληνικά
+      link: /
+      lang: el
+    - name: English
+      link: /en/
+      lang: en
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/antsinar
+      name: Antsinar on Github
+    - icon: fontawesome/brands/mastodon
+      link: https://mastodon.social/@tasos_me_undescore
+      name: Antsinar on Mastodon
+  generator: true
+  consent:
+    title: Topic Cookies
+    description: >-
+      We use cookies to recognize your repeated visits and preferences, as well
+      as to measure the effectiveness of our documentation and whether users
+      find what they're searching for. With your consent, you're helping us to
+      make our documentation better.
+    actions:
+      - accept
+      - reject

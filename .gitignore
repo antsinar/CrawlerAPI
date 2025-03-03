@@ -4,3 +4,4 @@ graphs/
 logs/
 .env
 *.in
+.cache/
