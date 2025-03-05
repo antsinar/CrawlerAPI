@@ -10,31 +10,22 @@ import orjson
 from dotenv import find_dotenv, load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from starlette.concurrency import iterate_in_threadpool
 
 from .constants import GRAPH_ROOT, Compressor, ConcurrentRequestLimit, CrawlDepth
 from .dependencies import (
     get_crawled_urls,
     get_resolver,
-    get_resolver_from_object,
     url_in_crawled,
-    url_in_crawled_from_object,
     url_not_in_crawled_from_object,
     validate_url,
 )
-from .lib import generate_graph, get_neighborhood
 from .management import GraphCleaner, GraphInfoUpdater, GraphWatcher
-from .models import AdjList, GraphInfo, NodeInGraph, QueueUrl
+from .models import GraphInfo, QueueUrl
 from .processor import TaskQueue
 from .routers.game import router as game_router
-from .storage import (
-    DictCacheRepository,
-    DictLeaderboardRepository,
-    ICacheRepository,
-    ILeaderboardRepository,
-    StorageEngine,
-)
+from .storage import DictCacheRepository, DictLeaderboardRepository, StorageEngine
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -171,37 +162,3 @@ async def queue_website(
             "position": request.app.state.task_queue.get_size(),
         },
     )
-
-
-@app.get("/stream-graph")
-async def stream_graph(
-    request: Request,
-    url: str,
-    url_crawled: Annotated[None, Depends(url_in_crawled)],
-    resolver: Annotated[Callable[[Compressor, bool], nx.Graph], Depends(get_resolver)],
-) -> StreamingResponse:
-    G: nx.Graph = resolver(request.app.state.compressor, not url_crawled)
-    response = StreamingResponse(
-        content=generate_graph(G), media_type="application/json"
-    )
-    return response
-
-
-@app.get("/get-node-neighborhood", response_model=AdjList)
-async def get_node_neighborhood(
-    request: Request,
-    node_in_graph: NodeInGraph,
-    url_crawled: Annotated[None, Depends(url_in_crawled_from_object)],
-    resolver: Annotated[
-        Callable[[Compressor, bool], nx.Graph], Depends(get_resolver_from_object)
-    ],
-):
-    """Return the neighbourhood of a node instance in a graph
-    :param url: root url of graph
-    :param node: Node model instance
-    """
-    G = resolver(request.app.state.compressor, not url_crawled)
-    neighborhood = get_neighborhood(G, node_in_graph.node)
-    if not neighborhood:
-        raise HTTPException(status_code=404, detail="Node not found")
-    return neighborhood

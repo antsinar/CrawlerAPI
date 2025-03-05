@@ -5,7 +5,7 @@ from enum import Enum
 from typing import Dict, List, Optional
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, PositiveFloat, PositiveInt
+from pydantic import BaseModel, Field, PositiveInt
 
 from .constants import MoveOptions, PowerupType, TrapType
 

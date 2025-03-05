@@ -22,7 +22,6 @@ from src.storage import (
     ILeaderboardRepository,
     LeaderboardComplete,
     LeaderboardDisplay,
-    LeaderboardTracker,
 )
 
 logging.basicConfig(level=logging.INFO)
