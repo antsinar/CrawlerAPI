@@ -22,7 +22,7 @@ class GraphManager:
         self.compressor = compressor
         self.pool = ThreadPoolExecutor(max_workers=processes)
         self.graphs: List[Path] = None
-        self.graph_info: dict[str, GraphInfo] = None
+        # self.graph_info: dict[str, GraphInfo] = None
         self.available = True
         self.parsed: set[Path] = set()
 

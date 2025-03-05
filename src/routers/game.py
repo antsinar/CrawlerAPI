@@ -128,7 +128,6 @@ async def get_node_neighborhood(
     ]
     # powerup_nodes = [*modifiers.powerups.keys()]
     active_modifiers = [*modifiers.triggered_traps, *modifiers.active_powerups]
-    teleport_nodes: List[str] = list()
     try:
         teleport_nodes = [
             node.id
@@ -137,7 +136,8 @@ async def get_node_neighborhood(
             ].teleport_nodes
         ]
     except KeyError:
-        pass
+        teleport_nodes = list()
+
     adj_list = AdjListPoints(
         source=NodePoints(id=current_node.id, points=0),
         dest=[
@@ -200,15 +200,17 @@ async def move_into_node(
     course.tracker.move_tracker.moves_taken += 1
     if target_node in course.tracker.path_tracker.movement_path:
         already_visited = True
+
     try:
-        teleport_nodes = [
+        teleport_nodes: List[str] = [
             node.id
             for node in request.app.state.info_updater.graph_info[
-                HTTPS_SCHEME + course.url
+                course.url
             ].teleport_nodes
         ]
     except KeyError:
-        pass
+        teleport_nodes = list()
+
     multiplier = calc_move_multiplier(course.tracker, target_node, teleport_nodes)
     course.tracker.path_tracker.movement_path.append(target_node)
     teleport_nodes: List[str] = list()
