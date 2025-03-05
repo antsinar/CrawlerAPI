@@ -1,17 +1,10 @@
-# Welcome to MkDocs
+# Website explorer
 
-For full documentation visit [mkdocs.org](https://www.mkdocs.org).
+Ένα παιχνίδι εξερεύνησης ιστοσελίδων, εμπνευσμένο από το δεινόσαυρο της Google.
 
-## Commands
-
-* `mkdocs new [dir-name]` - Create a new project.
-* `mkdocs serve` - Start the live-reloading docs server.
-* `mkdocs build` - Build the documentation site.
-* `mkdocs -h` - Print help message and exit.
-
-## Project layout
-
-    mkdocs.yml    # The configuration file.
-    docs/
-        index.md  # The documentation homepage.
-        ...       # Other markdown pages, images and other files.
+## Περιγραφή
+Το project έχει ως βάση έναν web crawler που φτιάχτηκε από την αρχή στη γλώσσα Python.  
+Με βάση αυτόν δημιουργούνται πίστες τις οποίες ο παίκτης καλείται να εξερευνήσει, με στόχο την κορυφή του leaderboard.  
+Οι κανόνες του παιχνιδιού είναι απλοί. Όταν ο παίκτης επισκέπτεται για πρώτη φορά ένα προορισμό (κόμβο) κερδίζει πόντους. Για κάθε συνεχόμενο μοναδικό κόμβο που επισκέπτεται ανεβάζει το σερί (streak) του, το οποίο πολλαπλασιάζει τους κερδισμένους πόντους του. Όσο ο παίκτης απομακρύνεται από την αρχική του τοποθεσία, τόσους περισσότερους πόντους μπορεί να κερδίσει, όπως επίσης μπορεί να βρει κόμβους τηλεμεταφοράς και powerups περιορισμένων κινήσεων. Προσοχή όμως, ανάμεσα στις βοήθειες κρύβονται και παγίδες.  
+  
+## Εκτέλεση
