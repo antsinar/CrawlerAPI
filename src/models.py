@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import random
 from enum import Enum
+from functools import cached_property
 from typing import Dict, List, Optional
 from uuid import uuid4
 
@@ -131,8 +132,33 @@ class CourseComplete(Course):
 
     nickname: str = Field(
         default_factory=lambda _: "".join(
-            [chr(random.randrange(65, 90)) for _ in range(3)]
+            [chr(random.randrange(65, 90)) for _ in range(5)]
         )
     )
     game_state: GameState = Field(default=GameState.IN_PROGRESS)
     tracker: CourseTracker
+
+
+class LeaderboardName(BaseModel):
+    course_url: str
+    moves: int
+
+    @cached_property
+    def key(self) -> str:
+        return f"{self.course_url}:{self.moves}"
+
+
+class LeaderboardDisplay(BaseModel):
+    uid: str = Field(default_factory=lambda _: uuid4().hex)
+    nickname: str
+    score: float
+    course_uid: str
+    stamp: str
+
+
+class LeaderboardTracker(CourseTracker):
+    pass
+
+
+class LeaderboardComplete(CourseComplete):
+    pass

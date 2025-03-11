@@ -8,6 +8,7 @@ import networkx as nx
 
 from src.constants import SCORE_MULTIPLIER_INCREMENT, PowerupType, TrapType
 from src.dependencies import GraphResolver
+from src.interfaces import ICacheRepository, ILeaderboardRepository
 from src.models import (
     Course,
     CourseComplete,
@@ -15,13 +16,9 @@ from src.models import (
     CoursePowerup,
     CourseTracker,
     CourseTrap,
-    Node,
-)
-from src.storage import (
-    ICacheRepository,
-    ILeaderboardRepository,
     LeaderboardComplete,
     LeaderboardDisplay,
+    Node,
 )
 
 logging.basicConfig(level=logging.INFO)

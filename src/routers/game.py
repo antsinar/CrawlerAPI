@@ -19,6 +19,7 @@ from src.dependencies import (
     resolve_graph_from_course,
     url_in_crawled,
 )
+from src.interfaces import ICacheRepository, ILeaderboardRepository
 from src.models import (
     AdjListPoints,
     CourseComplete,
@@ -31,11 +32,11 @@ from src.models import (
     CourseTracker,
     CourseTrap,
     GameState,
+    LeaderboardTracker,
     Node,
     NodePoints,
     NodePowerup,
 )
-from src.storage import ICacheRepository, ILeaderboardRepository, LeaderboardTracker
 from src.tasks.game import (
     calc_move_multiplier,
     calc_node_points,

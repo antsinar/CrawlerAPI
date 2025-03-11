@@ -1,21 +1,31 @@
+from __future__ import annotations
+
 import asyncio
 import inspect
 import logging
 from contextlib import contextmanager
 from enum import Enum
-from functools import cached_property
 from queue import Queue
-from typing import Dict, Generator, List, Protocol
+from typing import Dict, Generator, List
 from uuid import uuid4
 
 import orjson
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import ValidationError
 from pymemcache.client.base import PooledClient
 from pymemcache.exceptions import MemcacheError
 from sqlalchemy import Engine, create_engine, event, text
 from sqlalchemy.orm import sessionmaker
 
-from .models import CourseComplete, CourseModifiersHidden, CourseTracker
+from .interfaces import ILeaderboardRepository
+from .models import (
+    CourseComplete,
+    CourseModifiersHidden,
+    CourseTracker,
+    LeaderboardComplete,
+    LeaderboardDisplay,
+    LeaderboardName,
+    LeaderboardTracker,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -27,87 +37,6 @@ class DatabaseBusyError(Exception):
 class StorageEngine(Enum):
     DICT = 0
     SQLITE = 1
-
-
-class LeaderboardName(BaseModel):
-    course_url: str
-    moves: int
-
-    @cached_property
-    def key(self) -> str:
-        return f"{self.course_url}:{self.moves}"
-
-
-class LeaderboardDisplay(BaseModel):
-    uid: str = Field(default_factory=lambda _: uuid4().hex)
-    nickname: str
-    score: float
-    course_uid: str
-    stamp: str
-
-
-class LeaderboardTracker(CourseTracker):
-    pass
-
-
-class LeaderboardComplete(CourseComplete):
-    pass
-
-
-class ILeaderboardRepository(Protocol):
-    def backup(self, path: str):
-        """Backup the current state of the repository to permanent storage"""
-        ...
-
-    def init_leaderboard(self, course_url: str, moves: int) -> None:
-        """Create a new leaderboard for a course url and move combination"""
-        ...
-
-    def query_leaderboard(
-        self, course_url: str, max_moves: int, start: int = 0, limit: int | None = 100
-    ) -> List[LeaderboardDisplay]:
-        """Return the leaderboard for a course url and move combination for a given range"""
-        ...
-
-    def drop_leaderboard(self, course_url: str, max_moves: int) -> None:
-        """Drop the leaderboard for a course url"""
-        ...
-
-    def invalidate(self, entry_id) -> None:
-        """Remove an entry from any leaderboard"""
-        ...
-
-    def update_leaderboard(
-        self, course_url: str, max_moves: int, entry: LeaderboardDisplay
-    ) -> None:
-        """Add an entry to a leaderboard"""
-        ...
-
-    def course_exists(self, course_url: str, max_moves: int, course_uid: str) -> bool:
-        """Query leaderboards to find a course uid from Display objects"""
-        ...
-
-    def queue_tracker_object(self, entry: LeaderboardComplete) -> None:
-        """Dump tracker object to permanent storage"""
-        ...
-
-    def write_tracker_object(self, entry: LeaderboardComplete) -> None:
-        """Dump tracker object to permanent storage"""
-        ...
-
-    def read_tracker_object(self, course_id: str) -> LeaderboardTracker | None:
-        """Read tracker object from permanent storage"""
-        ...
-
-    def query_course_trackers(
-        self, course_url: str, max_moves: int, start: int = 0, limit: int | None = 100
-    ) -> List[LeaderboardTracker]:
-        """Return the tracker objects for a course url and move combination for a given range"""
-        ...
-
-    def delete_tracker_object(self, course_id: str) -> None:
-        """Delete tracker object from permanent storage"""
-        ...
 
 
 class DictLeaderboardRepository:
@@ -469,18 +398,6 @@ def _match_engine(engine: StorageEngine) -> ILeaderboardRepository:
             return DictLeaderboardRepository()
         case StorageEngine.SQLITE:
             return SQLiteLeaderboardRepository()
-
-
-class ICacheRepository(Protocol):
-    def course_exists(self, course_id: str) -> bool: ...
-    def get_course(self, course_id: str) -> CourseComplete | None: ...
-    def get_course_modifiers(self, course_id: str) -> CourseModifiersHidden | None: ...
-    def set_course(self, course_id: str, course: CourseComplete): ...
-    def set_course_modifiers(
-        self, course_id: str, modifiers: CourseModifiersHidden
-    ) -> None: ...
-    def delete_course(self, course_id: str): ...
-    def write_to_storage(self, course_id: str): ...
 
 
 class DictCacheRepository:
