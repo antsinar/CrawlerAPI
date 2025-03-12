@@ -5,6 +5,7 @@ import inspect
 import logging
 from contextlib import contextmanager
 from enum import Enum
+from pathlib import Path
 from queue import Queue
 from typing import Dict, Generator, List
 from uuid import uuid4
@@ -45,7 +46,12 @@ class DictLeaderboardRepository:
         self.trackers: Dict[str, LeaderboardTracker] = dict()
 
     def backup(self, path: str) -> None:
-        pass
+        (Path(__file__).parent / f"{path}.leaderboards").write_bytes(
+            orjson.dumps(self.leaderboards)
+        )
+        (Path(__file__).parent / f"{path}.trackers").write_bytes(
+            orjson.dumps(self.trackers)
+        )
 
     def init_leaderboard(self, course_url: str, moves: int) -> None:
         leaderboard_key = LeaderboardName(course_url=course_url, moves=moves).key
@@ -148,12 +154,9 @@ class SQLiteLeaderboardRepository:
     def __init__(self, database_uri: str):
         self.database_uri = database_uri
         self.engine = create_engine(self.database_uri)
-        self.tracker_queue: Queue[LeaderboardComplete] = Queue()
         self.busy = False
-        self.loop = asyncio.get_running_loop()
-        self.loop.run_in_executor(self._watch_tracker_queue())
+        self._set_pragma()
 
-    @event.listens_for(Engine, "connect", once=True)
     def _set_pragma(self) -> None:
         with self._flag_busy():
             connection = self.engine.connect()
@@ -183,16 +186,22 @@ class SQLiteLeaderboardRepository:
 
     def init_leaderboard(self, course_url: str, moves: int) -> None:
         with sessionmaker(self.engine)() as session:
-            session.execute(
+            result = session.execute(
                 text(
                     """INSERT INTO leaderboard (course_url, moves)
                        VALUES (:course_url, :moves)
                        ON CONFLICT DO NOTHING
+                       RETURNING uid;
                     """
                 ),
                 {"course_url": course_url, "moves": moves},
             )
-            # TODO: update index here
+            if not result.fetchone():
+                logger.error(
+                    f"Failed to create leaderboard for url {course_url} and moves {moves}"
+                )
+                session.rollback()
+                return
             session.commit()
 
     def query_leaderboard(
@@ -201,11 +210,11 @@ class SQLiteLeaderboardRepository:
         with sessionmaker(self.engine)() as session:
             entries = session.execute(
                 text(
-                    """SELECT uid, nickname, score, course_uid, stamp FROM leaderboard_display display
-                       INNER JOIN leaderboard
-                       ON leaderboard_display.leaderboard_id = leaderboard.id
-                       WHERE leaderboard.course_url = :course_url AND leaderboard.moves = :moves
-                       ORDER BY display.score DESC
+                    """SELECT d.uid, d.nickname, d.score, d.course_uid, d.stamp FROM leaderboard_display d
+                       INNER JOIN leaderboard l
+                       ON d.leaderboard_uid = l.uid
+                       WHERE l.course_url = :course_url AND l.moves = :moves
+                       ORDER BY d.score DESC
                        LIMIT :limit OFFSET :start
                     """
                 ),
@@ -232,7 +241,7 @@ class SQLiteLeaderboardRepository:
                     """DELETE FROM leaderboard
                        WHERE course_url = :course_url
                        AND moves = :moves
-                       RETURNING uid
+                       RETURNING uid;
                        """
                 ),
                 {"course_url": course_url, "moves": max_moves},
@@ -244,50 +253,56 @@ class SQLiteLeaderboardRepository:
                     % (course_url, max_moves)
                 )
                 session.rollback()
+                return
             session.commit()
 
     def invalidate(self, entry_id) -> None:
         raise NotImplementedError
 
     def update_leaderboard(
-        self, course_url: str, max_moves: int, entry: LeaderboardDisplay
+        self,
+        course_url: str,
+        max_moves: int,
+        entry: LeaderboardDisplay,
+        tracker_uid: str,
     ) -> None:
         with sessionmaker(self.engine)() as session:
             result = session.execute(
                 text(
                     """INSERT INTO leaderboard_display
-                       (leaderboard_uid, uid, nickname, score, course_uid, stamp)
+                       (leaderboard_uid, uid, nickname, score, course_uid, tracker_uid)
                        VALUES (
-                        (SELECT uid FROM leaderboard WHERE course_url = :course_url AND moves = :moves),
-                        :uid, :nickname, :score, :course_uid, :stamp
+                            (SELECT uid FROM leaderboard WHERE course_url = :course_url AND moves = :moves),
+                            :display_uid, :nickname, :score, :course_uid, :tracker_uid
                        )
-                       RETURNING uid
+                       RETURNING uid;
                     """
                 ),
                 {
                     "course_url": course_url,
                     "moves": max_moves,
-                    "uid": entry.uid,
+                    "display_uid": entry.uid,
                     "nickname": entry.nickname,
                     "score": entry.score,
                     "course_uid": entry.course_uid,
-                    "stamp": entry.stamp,
+                    "tracker_uid": tracker_uid,
                 },
             )
             entry_id = result.fetchone()
             if not entry_id:
                 logger.error(f"Failed to insert {entry}")
                 session.rollback()
+                return
             session.commit()
 
     def course_exists(self, course_url: str, max_moves: int, course_uid: str) -> bool:
         with sessionmaker(self.engine)() as session:
             entries = session.execute(
                 text(
-                    """SELECT course_uid FROM leaderboard_display display
-                       INNER JOIN leaderboard
-                       ON leaderboard_display.leaderboard_uid = leaderboard.uid
-                       WHERE leaderboard.course_url = :course_url AND leaderboard.moves = :moves
+                    """SELECT d.course_uid FROM leaderboard_display d
+                       INNER JOIN leaderboard l
+                       ON d.leaderboard_uid = l.uid
+                       WHERE l.course_url = :course_url AND l.moves = :moves
                     """
                 ),
                 {
@@ -299,42 +314,39 @@ class SQLiteLeaderboardRepository:
             return course_uid in [el[0] for el in result]
 
     def queue_tracker_object(self, entry: LeaderboardComplete) -> None:
-        self.tracker_queue.put(entry)
+        self.write_tracker_object(entry)
 
     def write_tracker_object(self, entry: LeaderboardComplete) -> None:
-        if not self.course_exists(
-            entry.url, entry.tracker.move_tracker.moves_target, entry.uid
-        ):
-            logger.error("Course with uid %s not found", entry.uid)
-            return
-
         with self._flag_busy():
             with sessionmaker(self.engine)() as session:
                 result = session.execute(
                     text(
                         """INSERT INTO leaderboard_tracker
-                          (uid, data)
-                          VALUES (:uid, :data)
-                          RETURNING uid
+                           (uid, data)
+                           VALUES (:uid, :data)
+                           RETURNING uid
                         """
                     ),
                     {"uid": uuid4().hex, "data": entry.tracker.model_dump_json()},
                 )
-                if not result.fetchone():
+                tracker_uid = result.fetchone()
+                if not tracker_uid:
                     logger.error(
                         f"Failed to insert tracker object for course {entry.uid}"
                     )
                     session.rollback()
+                    return
                 session.commit()
+                return tracker_uid[0]
 
     def read_tracker_object(self, course_id: str) -> LeaderboardTracker | None:
         with sessionmaker(self.engine)() as session:
             tracker = session.execute(
                 text(
-                    """SELECT data FROM leaderboard_tracker tracker
-                       INNER JOIN leaderboard_display display
-                       ON tracker.uid = display.tracker_uid
-                       WHERE display.course_uid = :course_uid
+                    """SELECT data FROM leaderboard_tracker t
+                       INNER JOIN leaderboard_display d
+                       ON t.uid = d.tracker_uid
+                       WHERE d.course_uid = :course_uid
                     """
                 ),
                 {"course_uid": course_id},
@@ -343,7 +355,7 @@ class SQLiteLeaderboardRepository:
             if not result:
                 return None
             try:
-                return LeaderboardTracker(**orjson.loads(result[1]))
+                return LeaderboardTracker(**orjson.loads(result[-1]))
             except orjson.JSONDecodeError:
                 return None
 
@@ -353,14 +365,14 @@ class SQLiteLeaderboardRepository:
         with sessionmaker(self.engine)() as session:
             trackers = session.execute(
                 text(
-                    """SELECT data FROM leaderboard_tracker tracker
-                       INNER JOIN leaderboard_display display
-                       ON tracker.uid = display.tracker_uid
-                       INNER JOIN leaderboard
-                       ON display.leaderboard_uid = leaderboard.uid
-                       WHERE leaderboard.course_url = :course_url
-                       AND leaderboard.moves = :moves
-                       ORDER BY display.score DESC
+                    """SELECT data FROM leaderboard_tracker t
+                       INNER JOIN leaderboard_display d
+                       ON t.uid = d.tracker_uid
+                       INNER JOIN leaderboard l
+                       ON d.leaderboard_uid = l.uid
+                       WHERE l.course_url = :course_url
+                       AND l.moves = :moves
+                       ORDER BY d.score DESC
                        LIMIT :limit OFFSET :start
                     """
                 ),
@@ -382,14 +394,6 @@ class SQLiteLeaderboardRepository:
 
     def delete_tracker_object(self, course_id: str) -> None:
         raise NotImplementedError
-
-    def _watch_tracker_queue(self):
-        while True:
-            if self.tracker_queue.empty() or self.busy:
-                continue
-            entry = self.tracker_queue.get()
-            self.write_tracker_object(entry)
-            self.tracker_queue.task_done()
 
 
 def _match_engine(engine: StorageEngine) -> ILeaderboardRepository:

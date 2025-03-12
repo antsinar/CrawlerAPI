@@ -96,6 +96,7 @@ async def course_begin(
         num_traps=10,
         num_powerups=10,
     )
+
     return course
 
 
@@ -284,7 +285,7 @@ async def update_leaderboard(request: Request, uid: str, tasks: BackgroundTasks)
     )
     if leaderboard_storage.course_exists(
         course_url=course.url,
-        max_moves=course.tracker.move_tracker.moves_target,
+        max_moves=course.tracker.move_tracker.moves_target.value,
         course_uid=uid,
     ):
         raise HTTPException(
@@ -304,20 +305,12 @@ async def update_leaderboard(request: Request, uid: str, tasks: BackgroundTasks)
 async def get_course_summary(request: Request, uid: str):
     cache_storage: ICacheRepository = request.app.state.cacheRepository
     course = cache_storage.get_course(uid)
-    if not course:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Course not in cache"
-        )
+    if course:
+        return course.tracker
+
     leaderboard_storage: ILeaderboardRepository = (
         request.app.state.leaderboardRepository
     )
-    if not leaderboard_storage.course_exists(
-        course.url, course.tracker.move_tracker.moves_target, uid
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Course not found in leaderboard",
-        )
     tracker: LeaderboardTracker | None = leaderboard_storage.read_tracker_object(uid)
     if not tracker:
         raise HTTPException(

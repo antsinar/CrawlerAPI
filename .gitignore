@@ -6,4 +6,4 @@ logs/
 *.in
 .cache
 .ruff_cache
-*.db
+*.db*

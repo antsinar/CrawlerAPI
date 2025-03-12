@@ -149,24 +149,30 @@ def calc_move_multiplier(
 def write_to_leaderboard(
     leaderboard_handler: ILeaderboardRepository, course: CourseComplete
 ) -> None:
-    if leaderboard_handler.course_exists(
-        course.url, course.tracker.move_tracker.moves_target, course.uid
-    ):
-        logger.info("Course already in leaderboard")
-        return
     logger.info("Initializing leaderboard")
-    leaderboard_handler.init_leaderboard(
-        course.url, course.tracker.move_tracker.moves_target
-    )
-    leaderboard_handler.update_leaderboard(
-        course.url,
-        course.tracker.move_tracker.moves_target,
-        LeaderboardDisplay(
-            nickname=course.nickname,
-            score=course.tracker.score_tracker.points,
-            course_uid=course.uid,
-            stamp=datetime.strftime(datetime.now(), "%H:%M:%S @ %d/%m/%Y"),
-        ),
-    )
+    try:
+        leaderboard_handler.init_leaderboard(
+            course.url, course.tracker.move_tracker.moves_target.value
+        )
+        tracker_uid = leaderboard_handler.write_tracker_object(
+            LeaderboardComplete(**course.model_dump())
+        )
+
+        if not tracker_uid:
+            return
+
+        leaderboard_handler.update_leaderboard(
+            course.url,
+            course.tracker.move_tracker.moves_target.value,
+            LeaderboardDisplay(
+                nickname=course.nickname,
+                score=course.tracker.score_tracker.points,
+                course_uid=course.uid,
+                stamp=datetime.strftime(datetime.now(), "%H:%M:%S @ %d/%m/%Y"),
+            ),
+            tracker_uid,
+        )
+    except Exception as e:
+        logger.error(f"Error in updating leaderboard: {e}")
+        return
     logger.info("Updated leaderboard successfully")
-    leaderboard_handler.queue_tracker_object(LeaderboardComplete(**course.model_dump()))

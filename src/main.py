@@ -2,6 +2,7 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 from os import environ
+from pathlib import Path
 from typing import Annotated, Callable, List
 from urllib.parse import urlparse
 
@@ -25,7 +26,12 @@ from .management import GraphCleaner, GraphInfoUpdater, GraphWatcher
 from .models import GraphInfo, QueueUrl
 from .processor import TaskQueue
 from .routers.game import router as game_router
-from .storage import DictCacheRepository, DictLeaderboardRepository, StorageEngine
+from .storage import (
+    DictCacheRepository,
+    DictLeaderboardRepository,
+    SQLiteLeaderboardRepository,
+    StorageEngine,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -38,7 +44,10 @@ async def lifespan(app: FastAPI):
         environment = environ.get("ENV", "development")
         app.state.compressor = Compressor.LZMA
         app.state.environment = environment
-        app.state.leaderboardRepository = DictLeaderboardRepository()
+        app.state.leaderboardRepository = SQLiteLeaderboardRepository(
+            database_uri="sqlite:///%s"
+            % (Path(__file__).parent.parent / "database.db").as_posix()
+        )
         app.state.cacheRepository = DictCacheRepository(
             storage_engine=StorageEngine.DICT
         )

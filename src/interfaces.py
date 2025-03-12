@@ -33,7 +33,11 @@ class ILeaderboardRepository(Protocol):
         ...
 
     def update_leaderboard(
-        self, course_url: str, max_moves: int, entry: LeaderboardDisplay
+        self,
+        course_url: str,
+        max_moves: int,
+        entry: LeaderboardDisplay,
+        tracker_uid: str,
     ) -> None:
         """Add an entry to a leaderboard"""
         ...
