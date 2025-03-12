@@ -18,6 +18,8 @@ anyio==4.8.0
     #   watchfiles
 babel==2.17.0
     # via mkdocs-material
+backrefs==5.8
+    # via mkdocs-material
 brotli==1.1.0
     # via -r .\requirements.txt
 build==1.2.2.post1
@@ -56,6 +58,8 @@ fastapi==0.115.6
     # via -r .\requirements.txt
 filelock==3.16.1
     # via virtualenv
+ghp-import==2.1.0
+    # via mkdocs
 greenlet==3.1.1
     # via
     #   -r .\requirements.txt
@@ -97,16 +101,39 @@ idna==3.10
     #   requests
 isort==5.13.2
     # via -r .\requirements-dev.in
+jinja2==3.1.6
+    # via
+    #   mkdocs
+    #   mkdocs-material
 lxml==5.3.0
     # via -r .\requirements.txt
 mako==1.3.9
     # via
     #   -r .\requirements.txt
     #   alembic
+markdown==3.7
+    # via
+    #   mkdocs
+    #   mkdocs-material
+    #   pymdown-extensions
 markupsafe==3.0.2
     # via
     #   -r .\requirements.txt
+    #   jinja2
     #   mako
+    #   mkdocs
+mergedeep==1.3.4
+    # via
+    #   mkdocs
+    #   mkdocs-get-deps
+mkdocs==1.6.1
+    # via mkdocs-material
+mkdocs-get-deps==0.2.0
+    # via mkdocs
+mkdocs-material==9.6.7
+    # via -r .\requirements-dev.in
+mkdocs-material-extensions==1.3.1
+    # via mkdocs-material
 networkx==3.4.2
     # via -r .\requirements.txt
 nodeenv==1.9.1
@@ -118,7 +145,13 @@ numpy==2.2.1
 orjson==3.10.12
     # via -r .\requirements.txt
 packaging==24.2
-    # via build
+    # via
+    #   build
+    #   mkdocs
+paginate==0.5.7
+    # via mkdocs-material
+pathspec==0.12.1
+    # via mkdocs
 pip-tools==7.4.1
     # via -r .\requirements-dev.in
 platformdirs==4.3.6
@@ -145,6 +178,8 @@ pyproject-hooks==1.2.0
     # via
     #   build
     #   pip-tools
+python-dateutil==2.9.0.post0
+    # via ghp-import
 python-dotenv==1.0.1
     # via
     #   -r .\requirements.txt
@@ -160,14 +195,14 @@ pyyaml==6.0.2
     #   uvicorn
 pyyaml-env-tag==0.1
     # via mkdocs
-regex==2024.11.6
-    # via mkdocs-material
 requests==2.32.3
     # via mkdocs-material
 ruff==0.8.4
     # via -r .\requirements-dev.in
 scipy==1.15.1
     # via -r .\requirements.txt
+six==1.17.0
+    # via python-dateutil
 sniffio==1.3.1
     # via
     #   -r .\requirements.txt
@@ -188,6 +223,8 @@ typing-extensions==4.12.2
     #   pydantic
     #   pydantic-core
     #   sqlalchemy
+urllib3==2.3.0
+    # via requests
 uvicorn[standard]==0.34.0
     # via -r .\requirements.txt
 virtualenv==20.29.0
