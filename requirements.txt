@@ -4,6 +4,8 @@
 #
 #    pip-compile '.\requirements.in'
 #
+alembic==1.15.1
+    # via -r .\requirements.in
 annotated-types==0.7.0
     # via pydantic
 anyio==4.8.0
@@ -25,16 +27,12 @@ colorama==0.4.6
     # via
     #   click
     #   uvicorn
-contourpy==1.3.1
-    # via matplotlib
 cssselect==1.2.0
     # via -r .\requirements.in
-cycler==0.12.1
-    # via matplotlib
 fastapi==0.115.6
     # via -r .\requirements.in
-fonttools==4.55.3
-    # via matplotlib
+greenlet==3.1.1
+    # via sqlalchemy
 h11==0.14.0
     # via
     #   httpcore
@@ -55,64 +53,49 @@ idna==3.10
     # via
     #   anyio
     #   httpx
-kiwisolver==1.4.8
-    # via matplotlib
 lxml==5.3.0
     # via -r .\requirements.in
-matplotlib==3.10.0
-    # via networkx
-networkx[default]==3.4.2
+mako==1.3.9
+    # via alembic
+markupsafe==3.0.2
+    # via mako
+networkx==3.4.2
     # via -r .\requirements.in
 numpy==2.2.1
     # via
-    #   contourpy
-    #   matplotlib
-    #   networkx
-    #   pandas
+    #   -r .\requirements.in
     #   scipy
 orjson==3.10.12
     # via -r .\requirements.in
-packaging==24.2
-    # via matplotlib
-pandas==2.2.3
-    # via networkx
-pillow==11.1.0
-    # via matplotlib
 pydantic==2.10.5
     # via fastapi
 pydantic-core==2.27.2
     # via pydantic
 pymemcache==4.0.0
     # via -r .\requirements.in
-pyparsing==3.2.1
-    # via matplotlib
-python-dateutil==2.9.0.post0
-    # via
-    #   matplotlib
-    #   pandas
 python-dotenv==1.0.1
     # via
     #   -r .\requirements.in
     #   uvicorn
-pytz==2024.2
-    # via pandas
 pyyaml==6.0.2
     # via uvicorn
 scipy==1.15.1
-    # via networkx
-six==1.17.0
-    # via python-dateutil
+    # via -r .\requirements.in
 sniffio==1.3.1
     # via anyio
+sqlalchemy==2.0.38
+    # via
+    #   -r .\requirements.in
+    #   alembic
 starlette==0.41.3
     # via fastapi
 typing-extensions==4.12.2
     # via
+    #   alembic
     #   fastapi
     #   pydantic
     #   pydantic-core
-tzdata==2024.2
-    # via pandas
+    #   sqlalchemy
 uvicorn[standard]==0.34.0
     # via -r .\requirements.in
 watchfiles==1.0.4

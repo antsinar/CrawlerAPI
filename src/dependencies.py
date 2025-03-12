@@ -19,6 +19,8 @@ async def validate_url(request: Request) -> None:
         req = await request.json()
         result = urlparse(req["url"])
         all([result.scheme, result.netloc])
+    except KeyError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid URL")
 
@@ -59,7 +61,10 @@ async def url_in_crawled_from_object(
     returns if url is in crawled_urls, else raises HTTPException
     """
     req = await request.json()
-    parsed: ParseResult = urlparse(req["url"])
+    try:
+        parsed: ParseResult = urlparse(req["url"])
+    except KeyError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     if parsed.netloc not in crawled_urls:
         raise HTTPException(status_code=404, detail="Website not yet crawled")
     return
@@ -74,7 +79,10 @@ async def url_not_in_crawled_from_object(
     returns if url is not in crawled_urls, else raises HTTPException
     """
     req = await request.json()
-    parsed: ParseResult = urlparse(req["url"])
+    try:
+        parsed: ParseResult = urlparse(req["url"])
+    except KeyError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     if parsed.netloc in crawled_urls:
         raise HTTPException(status_code=409, detail="Already Crawled")
     return
@@ -156,7 +164,10 @@ async def get_resolver_from_object(
     resolvers: Annotated[dict[str, GraphResolver], Depends(graph_resolvers)],
 ) -> Callable[[Compressor, bool], Graph]:
     res = await request.json()
-    return resolvers[urlparse(res["url"]).netloc]
+    try:
+        return resolvers[urlparse(res["url"]).netloc]
+    except KeyError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 async def resolve_course_url(request: Request, uid: str) -> str:
@@ -175,4 +186,7 @@ async def resolve_graph_from_course(
     resolvers: Annotated[dict[str, GraphResolver], Depends(graph_resolvers)],
 ) -> Callable[[Compressor, bool], Graph]:
     """Determine a course from its uid and return the corresponding graph resolver object"""
-    return resolvers[urlparse(HTTPS_SCHEME + course_url).netloc]
+    try:
+        return resolvers[urlparse(HTTPS_SCHEME + course_url).netloc]
+    except KeyError as e:
+        raise HTTPException(status_code=400, detail=str(e))

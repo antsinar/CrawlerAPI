@@ -3,7 +3,7 @@ import logging
 from contextlib import asynccontextmanager
 from importlib import import_module
 from types import ModuleType
-from typing import AsyncGenerator, Generator, List, Optional
+from typing import AsyncGenerator, List, Optional
 from urllib.parse import urljoin, urlparse
 from urllib.robotparser import RobotFileParser
 
@@ -232,20 +232,6 @@ async def process_url(
             compressor_module,
             compressor_extensions[compressor],
         )
-
-
-def generate_graph(G: nx.Graph) -> Generator[str, None, None]:
-    """Return generator expression of serialized graph neighborhoods
-    :param G: networkx graph, undirected
-    :return: generator of serialized AdjList model
-    """
-    return (
-        AdjList(
-            source=Node(id=source),
-            dest=[Node(id=key) for key in dest_dict],
-        ).model_dump_json()
-        for source, dest_dict in G.adjacency()
-    )
 
 
 def get_neighborhood(G: nx.Graph, node: Node) -> Optional[AdjList]:

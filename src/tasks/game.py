@@ -8,6 +8,7 @@ import networkx as nx
 
 from src.constants import SCORE_MULTIPLIER_INCREMENT, PowerupType, TrapType
 from src.dependencies import GraphResolver
+from src.interfaces import ICacheRepository, ILeaderboardRepository
 from src.models import (
     Course,
     CourseComplete,
@@ -15,14 +16,9 @@ from src.models import (
     CoursePowerup,
     CourseTracker,
     CourseTrap,
-    Node,
-)
-from src.storage import (
-    ICacheRepository,
-    ILeaderboardRepository,
     LeaderboardComplete,
     LeaderboardDisplay,
-    LeaderboardTracker,
+    Node,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -57,7 +53,6 @@ class CourseModHandler:
         self.powerups[node_id] = CoursePowerup(type=random.choice(list(PowerupType)))
 
     def initialize_modifiers(self, graph: nx.Graph) -> None:
-        logger.info("inside task")
         target_distance = 3
         try:
             furthest_nodes = [
@@ -75,23 +70,20 @@ class CourseModHandler:
             return
 
         try:
-            logger.info("creating modifiers")
             [self.create_trap(node) for node in traps_sample]
             [self.create_powerup(node) for node in powerups_sample]
         except Exception as e:
             logger.error(e)
             return
 
-        # set up random traps and powerups on the maximum distance available
         try:
             modifiers = CourseModifiersHidden(traps=self.traps, powerups=self.powerups)
-            logger.info("saving modifiers")
             self.cache_storage.set_course_modifiers(self.course.uid, modifiers)
         except Exception as e:
             logger.error(f"Error saving modifiers in cache: {e}")
             return
 
-        logger.info("modifiers ready")
+        logger.info("Course Modifiers ready")
 
 
 def initialize_course(
@@ -104,14 +96,13 @@ def initialize_course(
     """Store object containing information about the course
     and initialize the powerup creation class
     """
-    logger.info("entering task")
     if cache_storage.course_exists(course_id=course.uid):
-        logger.error("course already saved")
+        logger.error("Course already saved")
         return
     try:
         cache_storage.set_course(course.uid, course)
     except Exception as e:
-        logger.error(f"error in storing course in cache: {e}")
+        logger.error(f"Error in storing course in cache: {e}")
         return
     mod_handler = CourseModHandler(
         Course(
@@ -158,24 +149,30 @@ def calc_move_multiplier(
 def write_to_leaderboard(
     leaderboard_handler: ILeaderboardRepository, course: CourseComplete
 ) -> None:
-    if leaderboard_handler.course_exists(
-        course.url, course.tracker.move_tracker.moves_target, course.uid
-    ):
-        logger.info("Course already in leaderboard")
-        return
     logger.info("Initializing leaderboard")
-    leaderboard_handler.init_leaderboard(
-        course.url, course.tracker.move_tracker.moves_target
-    )
-    leaderboard_handler.update_leaderboard(
-        course.url,
-        course.tracker.move_tracker.moves_target,
-        LeaderboardDisplay(
-            nickname=course.nickname,
-            score=course.tracker.score_tracker.points,
-            course_uid=course.uid,
-            stamp=datetime.strftime(datetime.now(), "%H:%M:%S @ %d/%m/%Y"),
-        ),
-    )
+    try:
+        leaderboard_handler.init_leaderboard(
+            course.url, course.tracker.move_tracker.moves_target.value
+        )
+        tracker_uid = leaderboard_handler.write_tracker_object(
+            LeaderboardComplete(**course.model_dump())
+        )
+
+        if not tracker_uid:
+            return
+
+        leaderboard_handler.update_leaderboard(
+            course.url,
+            course.tracker.move_tracker.moves_target.value,
+            LeaderboardDisplay(
+                nickname=course.nickname,
+                score=course.tracker.score_tracker.points,
+                course_uid=course.uid,
+                stamp=datetime.strftime(datetime.now(), "%H:%M:%S @ %d/%m/%Y"),
+            ),
+            tracker_uid,
+        )
+    except Exception as e:
+        logger.error(f"Error in updating leaderboard: {e}")
+        return
     logger.info("Updated leaderboard successfully")
-    leaderboard_handler.queue_tracker_object(LeaderboardComplete(**course.model_dump()))

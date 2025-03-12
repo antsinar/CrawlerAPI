@@ -4,4 +4,6 @@ graphs/
 logs/
 .env
 *.in
-.cache/
+.cache
+.ruff_cache
+*.db*
