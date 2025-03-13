@@ -11,40 +11,56 @@ from .constants import GRAPH_ROOT, HTTPS_SCHEME, Compressor, compressor_extensio
 
 
 async def validate_url(request: Request) -> None:
-    """Basic url validator; returns if url is valid
-    :param request: Request object from FastAPI; contains QueueUrl object from post request
-    returns if the url is valid, else raises HTTPException
     """
+    Basic url validation; Returns if url passed in the request body is valid
+
+    Args:
+        request: Request object from FastAPI
+
+    Raises:
+        HTTPException: Url is not present in request body
+        HTTPException: Url validation by urlparse failed to detect necessary attributes
+    """
+    req = await request.json()
+    result = urlparse(req.get("url", None))
+    if not result.scheme:
+        raise HTTPException(status_code=400, detail="Url not present in request body")
     try:
-        req = await request.json()
-        result = urlparse(req["url"])
         all([result.scheme, result.netloc])
-    except KeyError as e:
-        raise HTTPException(status_code=400, detail=str(e))
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid URL")
 
 
-def get_crawled_urls(request: Request) -> List[str]:
-    """Return list of crawled urls, found as compressed files in GRAPH_ROOT
-    :param request: Request object from FastAPI; contains Compressor object
-    :return: url netlocs as a list
+async def get_crawled_urls(request: Request) -> List[str]:
     """
+    Returns list of already crawled urls
+
+    Args:
+        request (Request): Request object from FastAPI
+
+    Returns:
+        List[str]: List of already crawled urls present in the storage medium
+    """
+    compressor = request.app.state.compressor.value
     return [
         graph.stem
         for graph in GRAPH_ROOT.iterdir()
-        if graph.is_file()
-        and graph.suffix == compressor_extensions[request.app.state.compressor.value]
+        if graph.is_file() and graph.suffix == compressor_extensions[compressor]
     ]
 
 
-def url_in_crawled(
+async def url_in_crawled(
     url: str, crawled_urls: Annotated[List[str], Depends(get_crawled_urls)]
 ) -> None:
-    """Check if url is already crawled
-    :param url: url to check
-    :param crawled_urls: list of already crawled urls, as a fastapi dependency
-    returns if url is in crawled_urls, else raises HTTPException
+    """
+    Checks if a url, passed as a url query parameter, is already crawled
+
+    Args:
+        url (str): A url string, including scheme and encoded in utf-8
+        crawled_urls ([List[str]): The list of already crawled urls that runs as a fastapi dependency
+
+    Raises:
+        HTTPException: Website not yet crawled
     """
     parsed: ParseResult = urlparse(url)
     if parsed.netloc not in crawled_urls:
@@ -54,17 +70,25 @@ def url_in_crawled(
 
 async def url_in_crawled_from_object(
     request: Request, crawled_urls: Annotated[List[str], Depends(get_crawled_urls)]
-):
-    """Check if a QueueUrl object is already crawled
-    :param request: Request object from FastAPI; contains QueueUrl object from post request
-    :param crawled_urls: list of already crawled urls, as a fastapi dependency
-    returns if url is in crawled_urls, else raises HTTPException
+) -> None:
+    """
+    Check if a url passed in the request body is already crawled
+
+    Args:
+        request (Request): Request object from FastAPI
+        crawled_urls ([List[str]): The list of already crawled urls that runs as a fastapi dependency
+
+    Returns:
+        None: Returns if url is already crawled
+
+    Raises:
+        HTTPException: Url is not present in request body
+        HTTPException: Website not yet crawled
     """
     req = await request.json()
-    try:
-        parsed: ParseResult = urlparse(req["url"])
-    except KeyError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    parsed: ParseResult = urlparse(req.get("url", None))
+    if not parsed.scheme:
+        raise HTTPException(status_code=400, detail="Url not present in request body")
     if parsed.netloc not in crawled_urls:
         raise HTTPException(status_code=404, detail="Website not yet crawled")
     return
@@ -72,19 +96,27 @@ async def url_in_crawled_from_object(
 
 async def url_not_in_crawled_from_object(
     request: Request, crawled_urls: Annotated[List[str], Depends(get_crawled_urls)]
-):
-    """Check if a QueueUrl object is not already crawled
-    :param request: Request object from FastAPI; contains QueueUrl object from post request
-    :param crawled_urls: list of already crawled urls, as a fastapi dependency
-    returns if url is not in crawled_urls, else raises HTTPException
+) -> None:
+    """
+    Check if a url passed in the request body is already crawled
+
+    Args:
+        request (Request): Request object from FastAPI
+        crawled_urls ([List[str]): The list of already crawled urls that runs as a fastapi dependency
+
+    Returns:
+        None: Returns if url is not already crawled
+
+    Raises:
+        HTTPException: Url is not present in request body
+        HTTPException: Website is already crawled
     """
     req = await request.json()
-    try:
-        parsed: ParseResult = urlparse(req["url"])
-    except KeyError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    parsed: ParseResult = urlparse(req.get("url", None))
+    if not parsed.scheme:
+        raise HTTPException(status_code=400, detail="Url not present in request body")
     if parsed.netloc in crawled_urls:
-        raise HTTPException(status_code=409, detail="Already Crawled")
+        raise HTTPException(status_code=404, detail="Website not yet crawled")
     return
 
 
@@ -94,12 +126,18 @@ def extract_graph(
     extension: str,
     url_crawled: bool,
 ) -> Optional[Graph]:
-    """Create and return networkx graph from a compressed file, if the requested ulr is already crawled
-    :param url: url to extract graph from
-    :param compressor_module: compressor module
-    :param extension: compressed file extension
-    :param url_crawled: boolean, is the url already crawled?
-    returns a networkx graph, if the url is already crawled, else None
+    """
+    Extracts a networkx graph object from a compressed file for a given
+    url and compressor module.
+
+    Args:
+        url (str): url used to detect graph in storage
+        compressor_module (ModuleType): compressor module used application wide
+        extension (str): compressed file extension, matches compressor module
+        url_crawled (bool): boolean, is the url already crawled?
+
+    Returns:
+        networkx.Graph:
     """
     if not url_crawled:
         return
@@ -112,15 +150,30 @@ def extract_graph(
 
 
 class GraphResolver:
+    """
+    Class to match a url to a networkx graph
+
+    Args:
+        url (str): url to extract graph from
+    """
+
     def __init__(self, url: str | None = None) -> None:
         self.url = url
 
-    def __call__(self, compressor: Compressor, url_crawled: bool) -> Graph:
-        """Extracts a networkx graph object from a compressed file for a given
-        url and compressor module.
-        :param compressor: compressor module
-        :param url_crawled: boolean, is the url already crawled?
-        returns a networkx graph, if the url is already crawled, else raise HTTPException
+    def __call__(self, compressor: Compressor, url_crawled: bool = True) -> Graph:
+        """
+        When the object is called, extract a networkx graph object from a compressed
+        file for a given url and a compressor module.
+
+        Args:
+            compressor (Compressor): Compressor Enum type
+            url_crawled (bool): boolean, is the url already crawled?
+
+        Raises:
+            HTTPException: Website not yet crawled
+
+        Returns:
+            networkx.Graph: Graph assotiated with the url
         """
         compressor_module: ModuleType = import_module(compressor.value)
         G: Optional[Graph] = extract_graph(
@@ -138,7 +191,15 @@ class GraphResolver:
 def graph_resolvers(
     crawled_urls: Annotated[List[str], Depends(get_crawled_urls)],
 ) -> dict[str, GraphResolver]:
-    """Return dictionary of GraphResolver callables, initiated for every crawled url"""
+    """
+    Return dictionary of GraphResolver callables, initiated for every crawled url
+
+    Args:
+        crawled_urls (List[str]): List of already crawled urls
+
+    Returns:
+        dict[str, GraphResolver]: Dictionary of pre-computed GraphResolver callables
+    """
     return {url: GraphResolver(HTTPS_SCHEME + url) for url in crawled_urls}
 
 
@@ -146,16 +207,24 @@ def get_resolver(
     url: str,
     resolvers: Annotated[dict[str, GraphResolver], Depends(graph_resolvers)],
 ) -> Callable[[Compressor, bool], Graph]:
-    """Returns the corresponding GraphResolver instance for the given url
-    :param url: url to get resolver for, usually already validated at that point
-    :param resolvers: dictionary of GraphResolver callables
-    In the chance the url does not exist, raise 500 HTTPException
+    """
+    Returns the corresponding GraphResolver instance for the given url
+
+    Args:
+        url (str): url to extract graph from
+        resolvers (Dict[str, GraphResolver]): Dictionary of pre-computed GraphResolver callables
+
+    Raises:
+        HTTPException: Unable to resolve url from pre-computed dictionary
+
+    Returns:
+        Callable[[Compressor, bool], Graph]: GraphResolver callable
     """
     try:
         return resolvers[urlparse(url).netloc]
     except KeyError:
         raise HTTPException(
-            status_code=500, detail="Unexpected error: get_resolver dependency"
+            status_code=400, detail="Unexpected error: Unable to resolve url"
         )
 
 
@@ -163,15 +232,69 @@ async def get_resolver_from_object(
     request: Request,
     resolvers: Annotated[dict[str, GraphResolver], Depends(graph_resolvers)],
 ) -> Callable[[Compressor, bool], Graph]:
+    """
+    Returns the corresponding GraphResolver instance for the given url passed inside the request body
+
+    Args:
+        request (Request): Request object from FastAPI
+        resolvers (Dict[str, GraphResolver]): Dictionary of pre-computed GraphResolver callables
+
+    Raises:
+        HTTPException: Unable to resolve url from pre-computed dictionary
+
+    Returns:
+        Callable[[Compressor, bool], Graph]: GraphResolver callable
+    """
     res = await request.json()
-    try:
-        return resolvers[urlparse(res["url"]).netloc]
-    except KeyError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    url = res.get("url", None)
+    if not url:
+        raise HTTPException(status_code=400, detail="Url not present in request body")
+    resolver = resolvers.get(urlparse(url).netloc, None)
+    if not resolver:
+        raise HTTPException(
+            status_code=400, detail="Unexpected error: Unable to resolve url"
+        )
+    return resolver
 
 
 async def resolve_course_url(request: Request, uid: str) -> str:
-    """Search the running courses for given course uid and return the url, otherwise raise HTTPExceprion"""
+    """
+    Search the running courses for given course uid and return the url
+
+    Args:
+        request (Request): Request object from FastAPI
+        uid (str): ID of the course
+
+    Raises:
+        HTTPException: ID does not correspond to an active course
+
+    Returns:
+        str: url of the active course
+    """
+    if uid not in request.app.state.active_courses.keys():
+        raise HTTPException(
+            status_code=404, detail="ID does not correspond to an active course"
+        )
+    return request.app.state.active_courses[uid]
+
+
+async def resolve_course_url_object(request: Request) -> str:
+    """
+    Search the running courses for given course uid given inside the request body and return the url
+
+    Args:
+        request (Request): Request object from FastAPI
+
+    Raises:
+        HTTPException: ID does not correspond to an active course
+
+    Returns:
+        str: url of the active course
+    """
+    res = await request.json()
+    uid = res.get("uid", None)
+    if not uid:
+        raise HTTPException(status_code=400, detail="Uid not present in request body")
     if uid not in request.app.state.active_courses.keys():
         raise HTTPException(
             status_code=404, detail="ID does not correspond to an active course"
@@ -185,7 +308,47 @@ async def resolve_graph_from_course(
     course_url: Annotated[str, Depends(resolve_course_url)],
     resolvers: Annotated[dict[str, GraphResolver], Depends(graph_resolvers)],
 ) -> Callable[[Compressor, bool], Graph]:
-    """Determine a course from its uid and return the corresponding graph resolver object"""
+    """
+    Determine a course from its uid and return the corresponding graph resolver object
+
+    Args:
+        request (Request): Request object from FastAPI
+        uid (str): ID of the course
+        course_url (str): Url assotiated with the course
+        resolvers dict[str, GraphResolver]: Dictionary of pre-computed GraphResolver callables
+
+    Raises:
+        HTTPException: Course url not found in pre-computed dictionary
+
+    Returns:
+        Callable[[Compressor, bool], Graph]: GraphResolver callable
+    """
+    try:
+        return resolvers[urlparse(HTTPS_SCHEME + course_url).netloc]
+    except KeyError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+async def resolve_graph_from_course_object(
+    request: Request,
+    course_url: Annotated[str, Depends(resolve_course_url_object)],
+    resolvers: Annotated[dict[str, GraphResolver], Depends(graph_resolvers)],
+) -> Callable[[Compressor, bool], Graph]:
+    """
+    Determine a course from its uid given inside the request body and return the
+    corresponding graph resolver object
+
+    Args:
+        request (Request): Request object from FastAPI
+        course_url (str): Url assotiated with the course
+        resolvers dict[str, GraphResolver]: Dictionary of pre-computed GraphResolver callables
+
+    Raises:
+        HTTPException: Course url not found in pre-computed dictionary
+
+    Returns:
+        Callable[[Compressor, bool], Graph]: GraphResolver callable
+    """
     try:
         return resolvers[urlparse(HTTPS_SCHEME + course_url).netloc]
     except KeyError as e:
