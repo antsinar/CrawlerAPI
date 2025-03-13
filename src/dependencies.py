@@ -188,7 +188,7 @@ class GraphResolver:
         return G
 
 
-def graph_resolvers(
+async def graph_resolvers(
     crawled_urls: Annotated[List[str], Depends(get_crawled_urls)],
 ) -> dict[str, GraphResolver]:
     """
@@ -203,7 +203,7 @@ def graph_resolvers(
     return {url: GraphResolver(HTTPS_SCHEME + url) for url in crawled_urls}
 
 
-def get_resolver(
+async def get_resolver(
     url: str,
     resolvers: Annotated[dict[str, GraphResolver], Depends(graph_resolvers)],
 ) -> Callable[[Compressor, bool], Graph]:

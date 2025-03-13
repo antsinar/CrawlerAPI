@@ -49,6 +49,11 @@ class NodeInGraph(BaseModel):
         return f"{self.url}: {self.node}"
 
 
+class NodeInCourse(BaseModel):
+    uid: str
+    node: Node
+
+
 class Course(BaseModel):
     uid: str = Field(default_factory=lambda _: uuid4().hex)
     url: str
