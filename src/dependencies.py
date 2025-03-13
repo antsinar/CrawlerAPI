@@ -1,4 +1,5 @@
 from importlib import import_module
+from json import JSONDecodeError
 from types import ModuleType
 from typing import Annotated, Callable, List, Optional
 from urllib.parse import ParseResult, urlparse
@@ -21,7 +22,10 @@ async def validate_url(request: Request) -> None:
         HTTPException: Url is not present in request body
         HTTPException: Url validation by urlparse failed to detect necessary attributes
     """
-    req = await request.json()
+    try:
+        req = await request.json()
+    except JSONDecodeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     result = urlparse(req.get("url", None))
     if not result.scheme:
         raise HTTPException(status_code=400, detail="Url not present in request body")
@@ -85,7 +89,10 @@ async def url_in_crawled_from_object(
         HTTPException: Url is not present in request body
         HTTPException: Website not yet crawled
     """
-    req = await request.json()
+    try:
+        req = await request.json()
+    except JSONDecodeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     parsed: ParseResult = urlparse(req.get("url", None))
     if not parsed.scheme:
         raise HTTPException(status_code=400, detail="Url not present in request body")
@@ -111,7 +118,10 @@ async def url_not_in_crawled_from_object(
         HTTPException: Url is not present in request body
         HTTPException: Website is already crawled
     """
-    req = await request.json()
+    try:
+        req = await request.json()
+    except JSONDecodeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     parsed: ParseResult = urlparse(req.get("url", None))
     if not parsed.scheme:
         raise HTTPException(status_code=400, detail="Url not present in request body")
@@ -245,7 +255,10 @@ async def get_resolver_from_object(
     Returns:
         Callable[[Compressor, bool], Graph]: GraphResolver callable
     """
-    res = await request.json()
+    try:
+        res = await request.json()
+    except JSONDecodeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     url = res.get("url", None)
     if not url:
         raise HTTPException(status_code=400, detail="Url not present in request body")
@@ -291,7 +304,10 @@ async def resolve_course_url_object(request: Request) -> str:
     Returns:
         str: url of the active course
     """
-    res = await request.json()
+    try:
+        res = await request.json()
+    except JSONDecodeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     uid = res.get("uid", None)
     if not uid:
         raise HTTPException(status_code=400, detail="Uid not present in request body")
