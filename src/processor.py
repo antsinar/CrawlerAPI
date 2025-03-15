@@ -55,7 +55,7 @@ class TaskQueue:
         async with self.capacity_semaphore():
             url = await self.queue.get()
             loop = asyncio.get_running_loop()
-            await loop.create_task(
+            loop.create_task(
                 process_url(url, self.compressor, self.crawl_depth, self.request_limit)
             )
             self.queue.task_done()

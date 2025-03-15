@@ -78,7 +78,7 @@ async def lifespan(app: FastAPI):
             )
         app.state.info_updater = info_updater
         app.state.active_courses = dict()
-        processor = asyncio.create_task(task_queue.process_queue())
+        # processor = asyncio.create_task(task_queue.process_queue())
         asyncio.create_task(watchdog.watch_graphs(cleaner, info_updater))
         yield
     except Exception as e:
