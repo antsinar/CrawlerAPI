@@ -1,7 +1,7 @@
 import asyncio
 import logging
-from concurrent.futures import ThreadPoolExecutor
-from functools import partial
+from contextlib import asynccontextmanager
+from typing import AsyncGenerator
 
 from .constants import Compressor, ConcurrentRequestLimit, CrawlDepth
 from .lib import process_url
@@ -19,50 +19,53 @@ class TaskQueue:
         request_limit=ConcurrentRequestLimit.AVERAGE,
     ):
         self.queue = asyncio.Queue()
-        self.pool = ThreadPoolExecutor(max_workers=1)
-        self.is_available: bool = True
         self.capacity: int = capacity
         self.compressor: Compressor = compressor
         self.crawl_depth = crawl_depth
         self.request_limit = request_limit
+
+    @asynccontextmanager
+    async def on_queue_push(self) -> AsyncGenerator[None, None]:
+        yield
+        if self.capacity > 0:
+            await self.process_queue()
+
+    @asynccontextmanager
+    async def capacity_semaphore(self) -> AsyncGenerator[None, None]:
+        self.capacity -= 1
+        try:
+            yield
+        except Exception:
+            pass
+        finally:
+            self.capacity += 1
 
     def get_size(self) -> int:
         return self.queue.qsize()
 
     async def push_url(self, url: str) -> None:
         """Pushes a url into the task queue"""
-        await self.queue.put(url)
+        async with self.on_queue_push():
+            await self.queue.put(url)
 
     async def process_queue(self):
         """Iterate on the urls in the queue and process them in a separate thread
         The capacity parameter indicates how many urls can be processed in concurrently
         """
-        while self.is_available:
-            if self.capacity < 1:
-                logger.info("Waiting for empty slot in Executor")
-                # await asyncio.sleep(1)
-                continue
+        async with self.capacity_semaphore():
             url = await self.queue.get()
-            self.capacity -= 1
             loop = asyncio.get_running_loop()
-            process_fn = partial(self._process_url, url)
-            res = await loop.run_in_executor(self.pool, process_fn)
+            loop.create_task(
+                process_url(url, self.compressor, self.crawl_depth, self.request_limit)
+            )
             self.queue.task_done()
-            self.capacity += 1
 
-    def _process_url(self, url: str):
-        """Runs the processing function"""
-        asyncio.run(
-            process_url(url, self.compressor, self.crawl_depth, self.request_limit)
-        )
+        if self.get_size() > 0:
+            await self.process_queue()
 
     async def stop(self):
         """Graceful shutdown of the task queue and executor;
         Waits until all taskes inside the queue are executed
         """
         logger.info("Shutting down Task Queue & Executor")
-        try:
-            self.is_available = False
-            self.pool.shutdown(wait=True)
-        except KeyboardInterrupt:
-            exit(1)
+        await self.queue.join()

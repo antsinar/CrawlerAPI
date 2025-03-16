@@ -13,6 +13,7 @@ import orjson
 from httpx import AsyncClient, AsyncHTTPTransport, HTTPStatusError, RequestError
 from lxml import html
 from lxml.cssselect import CSSSelector
+from lxml.etree import ParseError
 
 from .constants import (
     GRAPH_ROOT,
@@ -128,8 +129,11 @@ class Crawler:
                 if not await crawler.check_robots_compliance(url):
                     logger.info(f"Blocked by robots.txt: {p}")
                     return
-
-                tree = html.document_fromstring(response.text)
+                try:
+                    tree = html.document_fromstring(response.text)
+                except ParseError as e:
+                    logger.error(e)
+                    return
 
                 for href in anchor_selector(tree):
                     full_url = urljoin(url, href.attrib["href"], allow_fragments=False)
@@ -155,6 +159,11 @@ class Crawler:
             logger.error(
                 "Terminating due to error",
                 *[str(e)[:50] for e in HeaderMissingErrorGroup.exceptions],
+            )
+        except* ParseError as ParserErrorGroup:
+            logger.error(
+                "Terminating due to error",
+                *[str(e)[:100] for e in ParserErrorGroup.exceptions],
             )
         return
 
