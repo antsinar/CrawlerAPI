@@ -10,11 +10,18 @@ import networkx as nx
 import orjson
 from dotenv import find_dotenv, load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 from starlette.concurrency import iterate_in_threadpool
 
-from .constants import GRAPH_ROOT, Compressor, ConcurrentRequestLimit, CrawlDepth
+from .constants import (
+    GRAPH_ROOT,
+    HTTP_SCHEME,
+    Compressor,
+    ConcurrentRequestLimit,
+    CrawlDepth,
+)
 from .dependencies import (
     get_crawled_urls,
     get_resolver,
@@ -26,12 +33,7 @@ from .management import GraphCleaner, GraphInfoUpdater, GraphWatcher
 from .models import GraphInfo, QueueUrl
 from .processor import TaskQueue
 from .routers.game import router as game_router
-from .storage import (
-    DictCacheRepository,
-    DictLeaderboardRepository,
-    SQLiteLeaderboardRepository,
-    StorageEngine,
-)
+from .storage import DictCacheRepository, SQLiteLeaderboardRepository, StorageEngine
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -71,8 +73,7 @@ async def lifespan(app: FastAPI):
             )
         app.state.info_updater = info_updater
         app.state.active_courses = dict()
-        processor = asyncio.create_task(task_queue.process_queue())
-        asyncio.create_task(watchdog.watch_graphs(cleaner, info_updater))
+        loop.create_task(watchdog.watch_files(cleaner, info_updater))
         yield
     except Exception as e:
         pass
@@ -90,6 +91,13 @@ app = FastAPI(
     else None,
 )
 app.add_middleware(GZipMiddleware, minimum_size=3000, compresslevel=7)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.middleware("http")
@@ -100,7 +108,10 @@ async def append_new_course_to_app_state(request: Request, call_next):
         resp_body = [chunk async for chunk in response.body_iterator]
         response.body_iterator = iterate_in_threadpool(iter(resp_body))
         resp_body = orjson.loads(resp_body[0])
-        app.state.active_courses[resp_body["uid"]] = urlparse(resp_body["url"]).netloc
+        uid, url = resp_body.get("uid", None), resp_body.get("url", None)
+        if not (uid and url):
+            return response
+        app.state.active_courses[uid] = urlparse(HTTP_SCHEME + url).netloc
         return response
     return await call_next(request)
 

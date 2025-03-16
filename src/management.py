@@ -8,6 +8,7 @@ from typing import Callable, Dict, List, Optional
 
 import networkx as nx
 import orjson
+from watchfiles import Change, DefaultFilter, awatch
 
 from .constants import GRAPH_ROOT, HTTPS_SCHEME, Compressor, compressor_extensions
 from .dependencies import GraphResolver
@@ -15,6 +16,13 @@ from .models import GraphInfo, Node
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+class GraphFilterExtension(DefaultFilter):
+    allowed_extensions = ".gz", ".xz"
+
+    def __call__(self, change: Change, path: str) -> bool:
+        return super().__call__(change, path) and path.endswith(self.allowed_extensions)
 
 
 class GraphManager:
@@ -119,27 +127,45 @@ class GraphWatcher(GraphManager):
     ):
         [await loop.run_in_executor(self.pool, fn) for fn in functions]
 
-    async def watch_graphs(
+    async def watch_files(
         self, cleaner: GraphCleaner, updater: GraphInfoUpdater
     ) -> None:
-        """Watch graph directory for changes and update graphs"""
         logger.info("Starting Graph Watch background task")
-        last_modified = GRAPH_ROOT.stat().st_mtime
-        loop = asyncio.get_event_loop()
-        while self.available:
-            if last_modified == GRAPH_ROOT.stat().st_mtime:
-                await asyncio.sleep(0.1)
-                continue
-            logger.info("Detected change inside the graph directory")
-            try:
-                async with asyncio.TaskGroup() as tg:
-                    tg.create_task(
-                        self.run_scheduled_functions(
-                            loop, [cleaner.sweep, updater.update_info]
-                        )
+        try:
+            async for _changes in awatch(
+                GRAPH_ROOT,
+                watch_filter=GraphFilterExtension(),
+                ignore_permission_denied=True,
+                recursive=False,
+            ):
+                await self._handle_changes(cleaner, updater, retry=True)
+
+        except RuntimeError:
+            logger.error("No active event loop found to run the watcher routine")
+        except KeyboardInterrupt:
+            logger.info("Shutting down Graph Watch background task")
+
+        return
+
+    async def _handle_changes(
+        self, cleaner: GraphCleaner, updater: GraphInfoUpdater, retry: bool = False
+    ) -> None:
+        has_failed = False
+        try:
+            async with asyncio.TaskGroup() as tg:
+                tg.create_task(
+                    self.run_scheduled_functions(
+                        asyncio.get_running_loop(),
+                        [cleaner.sweep, updater.update_info],
                     )
-                last_modified = GRAPH_ROOT.stat().st_mtime
-            except* PermissionError as PermissionErrorGroup:
-                logger.error(*[str(e)[:100] for e in PermissionErrorGroup.exceptions])
-            except* EOFError as EOFGroup:
-                logger.error(*[str(e)[:100] for e in EOFGroup.exceptions])
+                )
+        except* PermissionError as PermissionErrorGroup:
+            logger.error(*[str(e)[:100] for e in PermissionErrorGroup.exceptions])
+            has_failed = True
+        except* EOFError as EOFGroup:
+            logger.error(*[str(e)[:100] for e in EOFGroup.exceptions])
+            has_failed = True
+
+        if retry and has_failed:
+            await asyncio.sleep(0.1)
+            await self._handle_changes(cleaner, updater, retry=True)

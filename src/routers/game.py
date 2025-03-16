@@ -18,6 +18,7 @@ from src.constants import (
     MAX_TRAPS_TRIGGERED,
     Compressor,
     Difficulty,
+    MoveOptions,
     difficulty_ranges,
 )
 from src.dependencies import (
@@ -53,7 +54,7 @@ from src.tasks.game import (
     write_to_leaderboard,
 )
 
-router = APIRouter(prefix="/course")
+router = APIRouter(prefix="/course", tags=["course"])
 
 
 @router.get("/generate-course-url")
@@ -77,6 +78,9 @@ async def generate_course_url(
 async def course_begin(
     request: Request,
     url: Annotated[str, Body(embed=True)],
+    moves_target: Annotated[
+        MoveOptions, Body(default_factory=lambda _: random.choice(list(MoveOptions)))
+    ],
     url_crawled: Annotated[None, Depends(url_in_crawled_from_object)],
     resolver: Annotated[
         Callable[[Compressor, bool], nx.Graph], Depends(get_resolver_from_object)
@@ -88,7 +92,7 @@ async def course_begin(
     nodes_list = list(G.nodes)
     source = Node(id=random.choice(nodes_list))
     tracker = CourseTracker(
-        move_tracker=CourseMoveTracker(),
+        move_tracker=CourseMoveTracker(moves_target=moves_target),
         score_tracker=CourseScoreTracker(),
         path_tracker=CoursePathTracker(
             current_node=source,

@@ -8,7 +8,13 @@ import orjson
 from fastapi import Depends, HTTPException, Request
 from networkx import Graph, node_link_graph
 
-from .constants import GRAPH_ROOT, HTTPS_SCHEME, Compressor, compressor_extensions
+from .constants import (
+    GRAPH_ROOT,
+    HTTP_SCHEME,
+    HTTPS_SCHEME,
+    Compressor,
+    compressor_extensions,
+)
 
 
 async def validate_url(request: Request) -> None:
@@ -93,9 +99,12 @@ async def url_in_crawled_from_object(
         req = await request.json()
     except JSONDecodeError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    parsed: ParseResult = urlparse(req.get("url", None))
-    if not parsed.scheme:
+    url = req.get("url", None)
+    if not url:
         raise HTTPException(status_code=400, detail="Url not present in request body")
+    parsed: ParseResult = urlparse(HTTP_SCHEME + url)
+    if not parsed.scheme:
+        raise HTTPException(status_code=400, detail="Wrong url format")
     if parsed.netloc not in crawled_urls:
         raise HTTPException(status_code=404, detail="Website not yet crawled")
     return
@@ -122,9 +131,12 @@ async def url_not_in_crawled_from_object(
         req = await request.json()
     except JSONDecodeError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    parsed: ParseResult = urlparse(req.get("url", None))
-    if not parsed.scheme:
+    url = req.get("url", None)
+    if not url:
         raise HTTPException(status_code=400, detail="Url not present in request body")
+    parsed: ParseResult = urlparse(HTTP_SCHEME + url)
+    if not parsed.scheme:
+        raise HTTPException(status_code=400, detail="Wrong url format")
     if parsed.netloc in crawled_urls:
         raise HTTPException(status_code=404, detail="Website not yet crawled")
     return
@@ -262,7 +274,7 @@ async def get_resolver_from_object(
     url = res.get("url", None)
     if not url:
         raise HTTPException(status_code=400, detail="Url not present in request body")
-    resolver = resolvers.get(urlparse(url).netloc, None)
+    resolver = resolvers.get(urlparse(HTTP_SCHEME + url).netloc, None)
     if not resolver:
         raise HTTPException(
             status_code=400, detail="Unexpected error: Unable to resolve url"
@@ -366,6 +378,6 @@ async def resolve_graph_from_course_object(
         Callable[[Compressor, bool], Graph]: GraphResolver callable
     """
     try:
-        return resolvers[urlparse(HTTPS_SCHEME + course_url).netloc]
+        return resolvers[urlparse(HTTP_SCHEME + course_url).netloc]
     except KeyError as e:
         raise HTTPException(status_code=400, detail=str(e))
