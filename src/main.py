@@ -33,12 +33,7 @@ from .management import GraphCleaner, GraphInfoUpdater, GraphWatcher
 from .models import GraphInfo, QueueUrl
 from .processor import TaskQueue
 from .routers.game import router as game_router
-from .storage import (
-    DictCacheRepository,
-    DictLeaderboardRepository,
-    SQLiteLeaderboardRepository,
-    StorageEngine,
-)
+from .storage import DictCacheRepository, SQLiteLeaderboardRepository, StorageEngine
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -78,8 +73,7 @@ async def lifespan(app: FastAPI):
             )
         app.state.info_updater = info_updater
         app.state.active_courses = dict()
-        # processor = asyncio.create_task(task_queue.process_queue())
-        asyncio.create_task(watchdog.watch_graphs(cleaner, info_updater))
+        loop.create_task(watchdog.watch_files(cleaner, info_updater))
         yield
     except Exception as e:
         pass
