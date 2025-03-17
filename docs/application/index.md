@@ -2,7 +2,7 @@
 
 ## Σχεδιαστικές επιλογές
 
-Οι δύο βασικοί σχεδιαστικοί πυλώνες που στηρίζεται η εφαρμογή είναι η ανάθεση εργασιών στο παρασκήνιο και η έντονη χρήση μηχανισμών cache. Σκοπός είναι να μείνει όσο γίνεται ανεπιρρέαστο το ασύγχρονο event loop από βαρύς υπολογισμούς, αλλά και να αποπφευχθεί η συχνή επικοινωνία με βάσεις δεδομένων. Υλοποιήσεις για τους τρόπους που έγινε αυτό βρίσκονται σε κάθε υπο-εφαρμογή του project, όπως η ουρά που χρησιμοποιείται για το crawling, εντολές management για τους γράφους - αποτελέσματα του crawler κτλ.  
+Οι δύο βασικοί σχεδιαστικοί πυλώνες που στηρίζεται η εφαρμογή είναι η ανάθεση εργασιών στο παρασκήνιο και η έντονη χρήση μηχανισμών cache. Σκοπός είναι να μείνει όσο γίνεται ανεπιρρέαστο το ασύγχρονο event loop από βαρύς υπολογισμούς, αλλά και να αποφευχθεί η συχνή επικοινωνία με βάσεις δεδομένων. Υλοποιήσεις για τους τρόπους που έγινε αυτό βρίσκονται σε κάθε υποεφαρμογή του project, όπως η ουρά που χρησιμοποιείται για το crawling, εντολές management για τους γράφους - αποτελέσματα του crawler κτλ.  
 
 Η πιο συχνή μορφή caching που εμφαζίνεται στο project είναι αυτή της αποθήκευσης πληροφορίας που χρειάζεται συχνά στη ροή του προγράμματος στη μεταβλητή `state` που παρέχεται από το ίδιο το FastAPI framework. Παρότι με αυτό το τρόπο επιβαρύνουμε το αποτύπωμα μνήμης της εφαρμογής, οι κρίσιμοι υπολογισμοί, όσο αφορά τους γράφους, γίνονται μόνο μία φορά και επομένως οι απαντήσεις στα web requests είναι άμεσες και η κατανάλωση μνήμης πολύ πιο προβλέψιμη.  
 
@@ -54,11 +54,6 @@
 Ο ρόλος του lifespan στην εφαρμογή, πέρα από το να εμπλουτίσει τη μεταβλητή κατάστασης όπως ήδη είδαμε, αρχικοποιεί διεργασίες παρασκηνίου που τρέχουν καθόλη τη διάρκεια ζωής της εφαρμογής.  
 
 Τέτοιες διεργασίες, διαθέσιμες στην ενότητα Management, είναι
-`task_queue.process_queue`
-:   Ένας ατέρμονας βρόχος που περιμένει εώς ότου υπάρχει διαθέσιμο url ώστε να μεταβιβάσει στον web crawler. Ο αριθμός των διεργασιών crawling που μπορούν να τρέξουν ταυτόχρονα καθορίζεται από τη μεταβλητή `capacity`.  
-
-    [Περισσότερα - Crawler]()
-
 ``` py title="src/main.py:lifespan" linenums="1"
 cleaner = GraphCleaner(app.state.compressor)
 info_updater = GraphInfoUpdater(app.state.compressor)
@@ -74,118 +69,13 @@ async with asyncio.TaskGroup() as tg:
 :   Στη συγκεκριμένη φάση του lifespan αρχικοποιούμε αντικείμενα, ορισμένα ως κλάσεις management, που διαχειρίζονται τόσο τους διαθέσιμους γράφους, όσο και τις προυπολογισμένες χαρακτηριστικές μεταβλητές τους που θα χρειαστούν μετέπειτα στην εφαρμογή, όπως ο αριθμός των κόμβων, των ακμών και τους κόμβους τηλεμεταφοράς (Βλέπε [παιχνίδι]()).
     
 `watchdog.watch_graphs(cleaner, info_updater)`
-:   Στη τελική φάση βλέπουμε ένα βρόχο παρακολούθησης της τοποθεσίας αποθήκευσης των γράφων στο δίσκο ώστε να προστίθονται αυτόματα νέα δεδομένα  όταν υπάρχει νέος διαθέσιμος γράφος.
+:   Στη τελική φάση βλέπουμε ένα βρόχο παρακολούθησης της τοποθεσίας αποθήκευσης των γράφων στο δίσκο ώστε να προστίθονται αυτόματα νέα δεδομένα όταν υπάρχει νέος διαθέσιμος γράφος.
 
     [Περισσότερα - Management]()
 
 ### Application middleware
-**Pending**
 
 ### Application Endpoints
-``` json
-"/graphs/all": {
-      "get": {
-        "summary": "Graphs",
-        "description": "Return already crawled website graphs",
-        "operationId": "graphs_graphs_all_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        }
-      }
-    },
-```
-:   get all graph urls
-
-``` json
-"/graphs/": {
-      "get": {
-        "summary": "Graph Info",
-        "description": "Return graph information, if present",
-        "operationId": "graph_info_graphs__get",
-        "parameters": [
-          {
-            "name": "url",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Url"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/GraphInfo"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-```
-:   get information about a graph 
-
-``` json
-"/queue-website/": {
-      "post": {
-        "summary": "Queue Website",
-        "description": "Append website for crawling and return status",
-        "operationId": "queue_website_queue_website__post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/QueueUrl"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-```
 
 ## Βασικές Βιβλιοθήκες 
 ### FastAPI

@@ -13,7 +13,7 @@
 python3 -m venv .venv
 source .venv/bin/activate
 
-# install prpoject dependencies
+# install project dependencies
 (.venv) pip install -r requirements.txt
 
 # perform database migrations
