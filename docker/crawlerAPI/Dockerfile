@@ -1,18 +1,29 @@
-ARG PYTHON_VERSION=3.13.1-slim-bullseye
+ARG PYTHON_VERSION=3.13.1
 
-FROM python:${PYTHON_VERSION} AS python
+FROM python:${PYTHON_VERSION}-bookworm AS python
 
 FROM python AS builder
 
+ARG APP_HOME=/app
+
 RUN apt-get update && apt-get install --no-install-recommends -y \
-    build-essential
+    build-essential \
+    curl \
+    ca-certificates && \
+    apt clean && rm -rf /var/lib/apt/lists/*
 
-COPY ./requirements.txt ./requirements.txt
+ADD https://astral.sh/uv/install.sh /uv-installer.sh
+RUN sh /uv-installer.sh && rm /uv-installer.sh
+ENV PATH="/root/.local/bin/:$PATH"
 
-RUN pip wheel --wheel-dir /usr/src/app/wheels \
-    -r requirements.txt
+WORKDIR ${APP_HOME}
 
-FROM python AS runner
+COPY ./pyproject.toml .
+COPY ./uv.lock .
+
+RUN uv sync --frozen
+
+FROM python:${PYTHON_VERSION}-slim-bookworm AS runner
 ARG BUILD_ENVIRONMENT=prod
 ARG APP_HOME=/app
 
@@ -22,13 +33,11 @@ ENV BUILD_ENV=${BUILD_ENVIRONMENT}
 
 WORKDIR ${APP_HOME}
 
-COPY --from=builder /usr/src/app/wheels /wheels/
+COPY . .
 
-RUN pip install --no-cache-dir --no-index --find-links=/wheels/ /wheels/* \
-    && rm -rf /wheels/
+COPY --from=builder ${APP_HOME}/.venv .venv
+ENV PATH="/${APP_HOME}/.venv/bin:$PATH"
 
 EXPOSE 8080
-
-COPY . ${APP_HOME}
 
 CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8080"]
