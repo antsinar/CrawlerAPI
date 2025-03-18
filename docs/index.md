@@ -66,3 +66,7 @@ source .venv/bin/activate
 * Sqlalchemy and memcached transactions  
 * Compile sqlalchemy queries and run against schema as a commit hook
 * Profile crawler resource usage compared to the target site and baseline usage
+
+**Project**
+
+* Migrate from pip-tools to uv
