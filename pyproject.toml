@@ -1,0 +1,56 @@
+[project]
+name = "crawler-api"
+version = "0.1.0"
+description = "An async web crawler implemented as a web API, mainly for educational purposes. "
+readme = "readme.md"
+requires-python = ">=3.13"
+dependencies = [
+    "alembic==1.15.1",
+    "annotated-types==0.7.0",
+    "anyio==4.8.0",
+    "brotli==1.1.0",
+    "certifi==2024.12.14",
+    "chardet==5.2.0",
+    "click==8.1.8",
+    "colorama==0.4.6",
+    "cssselect==1.2.0",
+    "fastapi==0.115.6",
+    "greenlet==3.1.1",
+    "h11==0.14.0",
+    "h2==4.1.0",
+    "hpack==4.0.0",
+    "httpcore==1.0.7",
+    "httptools==0.6.4",
+    "httpx[http2]==0.28.1",
+    "hyperframe==6.0.1",
+    "idna==3.10",
+    "lxml==5.3.0",
+    "mako==1.3.9",
+    "markupsafe==3.0.2",
+    "networkx==3.4.2",
+    "numpy==2.2.1",
+    "orjson==3.10.12",
+    "pydantic==2.10.5",
+    "pydantic-core==2.27.2",
+    "pymemcache==4.0.0",
+    "python-dotenv==1.0.1",
+    "pyyaml==6.0.2",
+    "scipy==1.15.1",
+    "sniffio==1.3.1",
+    "sqlalchemy==2.0.38",
+    "starlette==0.41.3",
+    "typing-extensions==4.12.2",
+    "uvicorn[standard]==0.34.0",
+    "watchfiles==1.0.4",
+    "websockets==14.1",
+]
+
+[dependency-groups]
+dev = [
+    "isort==5.13.2",
+    "mkdocs-material>=9.6.9",
+    "pre-commit==4.0.1",
+    "ruff>=0.11.0",
+    "tree-sitter>=0.24.0",
+    "tree-sitter-python>=0.23.6",
+]
