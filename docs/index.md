@@ -9,21 +9,20 @@
   
 ## Εκτέλεση
 ```sh
-# create virtual environment with the venv module
-python3 -m venv .venv
-source .venv/bin/activate
+# ensure uv is installed locally and is part of PATH
+uv --version
 
 # install project dependencies
-(.venv) pip install -r requirements.txt
+uv sync --frozen
 
 # perform database migrations
-(.venv) alembic upgrade head
+uv run alembic upgrade head
 
 # setup environment variables
-(.venv) EXPORT ENV=development
+EXPORT ENV=development
 
 # run application in development mode
-(.venv) uvicorn src.main:app --reload
+uv run uvicorn src.main:app --reload
 ```
 
 ## Μελλοντικές Ιδέες
@@ -69,4 +68,4 @@ source .venv/bin/activate
 
 **Project**
 
-* Migrate from pip-tools to uv
+* [**DONE**] Migrate from pip-tools to uv
