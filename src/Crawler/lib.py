@@ -22,7 +22,7 @@ from src.constants import (
     CrawlDepth,
     compressor_extensions,
 )
-from src.Crawler.models import AdjList, Node
+from src.Graph.models import AdjList, Node
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

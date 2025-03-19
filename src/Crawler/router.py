@@ -5,7 +5,7 @@ from fastapi.exceptions import HTTPException
 from fastapi.responses import JSONResponse
 
 from src.Crawler.models import QueueUrl
-from src.dependencies import url_not_in_crawled_from_object, validate_url
+from src.Graph.dependencies import url_not_in_crawled_from_object, validate_url
 
 router = APIRouter(prefix="/crawl", tags=["crawler"])
 

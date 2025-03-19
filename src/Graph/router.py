@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Request
 
 from src.constants import Compressor
 from src.Graph.dependencies import get_crawled_urls, get_resolver, url_in_crawled
-from src.models import GraphInfo
+from src.Graph.models import GraphInfo
 
 logger = logging.getLogger(__name__)
 

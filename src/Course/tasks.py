@@ -14,11 +14,10 @@ from src.Course.models import (
     CoursePowerup,
     CourseTracker,
     CourseTrap,
-    LeaderboardComplete,
-    LeaderboardDisplay,
 )
 from src.Graph.dependencies import GraphResolver
 from src.Graph.models import Node
+from src.Leaderboard.models import LeaderboardComplete, LeaderboardDisplay
 from src.Stores.interfaces import ICacheRepository, ILeaderboardRepository
 
 logging.basicConfig(level=logging.INFO)

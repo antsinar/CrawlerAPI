@@ -9,7 +9,7 @@ from pydantic import ValidationError
 from pymemcache.client.base import PooledClient
 from pymemcache.exceptions import MemcacheError
 
-from src.models import CourseComplete, CourseModifiersHidden, CourseTracker
+from src.Course.models import CourseComplete, CourseModifiersHidden, CourseTracker
 from src.Stores.interfaces import ILeaderboardRepository
 from src.Stores.Repositories.LeaderboardRepository import (
     DictLeaderboardRepository,

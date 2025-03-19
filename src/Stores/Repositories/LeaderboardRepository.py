@@ -11,7 +11,7 @@ import orjson
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
-from src.models import (
+from src.Leaderboard.models import (
     LeaderboardComplete,
     LeaderboardDisplay,
     LeaderboardName,

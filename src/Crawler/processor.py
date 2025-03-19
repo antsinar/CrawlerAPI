@@ -86,6 +86,7 @@ class TaskQueue:
         Access these variables from the crawler instance
         request_counter
         error_counter
+        TODO: Add status reporting mechanism for the crawler module
         """
         return {"OK": 100, "ERROR": 0}
 

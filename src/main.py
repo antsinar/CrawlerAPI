@@ -3,37 +3,31 @@ import logging
 from contextlib import asynccontextmanager
 from os import environ
 from pathlib import Path
-from typing import Annotated, Callable, List
 from urllib.parse import urlparse
 
-import networkx as nx
 import orjson
 from dotenv import find_dotenv, load_dotenv
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import RedirectResponse
 from starlette.concurrency import iterate_in_threadpool
 
-from .constants import (
+from src.constants import (
     GRAPH_ROOT,
     HTTP_SCHEME,
     Compressor,
     ConcurrentRequestLimit,
     CrawlDepth,
 )
-from .dependencies import (
-    get_crawled_urls,
-    get_resolver,
-    url_in_crawled,
-    url_not_in_crawled_from_object,
-    validate_url,
-)
-from .management import GraphCleaner, GraphInfoUpdater, GraphWatcher
-from .models import GraphInfo, QueueUrl
-from .processor import TaskQueue
-from .routers.game import router as game_router
-from .storage import DictCacheRepository, SQLiteLeaderboardRepository, StorageEngine
+from src.Course.router import router as course_router
+from src.Crawler.processor import TaskQueue
+from src.Crawler.router import router as crawler_router
+from src.Graph.management import GraphCleaner, GraphInfoUpdater, GraphWatcher
+from src.Graph.router import router as graph_router
+from src.Leaderboard.router import router as leaderboard_router
+from src.Stores.Repositories.CacheRepository import DictCacheRepository, StorageEngine
+from src.Stores.Repositories.LeaderboardRepository import SQLiteLeaderboardRepository
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -127,7 +121,10 @@ async def redirect_to_maintenance(request: Request, call_next):
     )
 
 
-app.include_router(game_router)
+app.include_router(course_router)
+app.include_router(crawler_router)
+app.include_router(graph_router)
+app.include_router(leaderboard_router)
 
 
 @app.get("/", include_in_schema=False)
@@ -137,48 +134,4 @@ async def root(request: Request):
         RedirectResponse(url="/docs")
         if request.app.state.environment != "production"
         else RedirectResponse(url="/graphs/all")
-    )
-
-
-@app.get("/graphs/all")
-async def graphs(crawled_urls: Annotated[List[str], Depends(get_crawled_urls)]):
-    """Return already crawled website graphs"""
-    return {
-        "crawled_urls": crawled_urls,
-    }
-
-
-@app.get("/graphs/", response_model=GraphInfo)
-async def graph_info(
-    request: Request,
-    url: str,
-    url_crawled: Annotated[None, Depends(url_in_crawled)],
-    resolver: Annotated[Callable[[Compressor, bool], nx.Graph], Depends(get_resolver)],
-):
-    """Return graph information, if present"""
-    try:
-        return request.app.state.info_updater.graph_info[urlparse(url).netloc]
-    except KeyError:
-        logger.info("Computing graph info")
-        G = resolver(request.app.state.compressor, True)
-        return GraphInfo(num_nodes=G.number_of_nodes(), num_edges=G.number_of_edges())
-
-
-@app.post("/queue-website/")
-async def queue_website(
-    request: Request,
-    queue_url: QueueUrl,
-    url_valid: Annotated[None, Depends(validate_url)],
-    url_crawled: Annotated[None, Depends(url_not_in_crawled_from_object)],
-):
-    """Append website for crawling and return status"""
-    if not url_crawled and queue_url.force:
-        raise HTTPException(status_code=409, detail="Already Crawled")
-    await request.app.state.task_queue.push_url(queue_url.url)
-    return JSONResponse(
-        status_code=201,
-        content={
-            "message": "Queued for Crawling",
-            "position": request.app.state.task_queue.get_size(),
-        },
     )

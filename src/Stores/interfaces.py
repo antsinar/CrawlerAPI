@@ -1,8 +1,7 @@
 from typing import List, Protocol
 
-from src.models import (
-    CourseComplete,
-    CourseModifiersHidden,
+from src.Course.models import CourseComplete, CourseModifiersHidden
+from src.Leaderboard.models import (
     LeaderboardComplete,
     LeaderboardDisplay,
     LeaderboardTracker,
