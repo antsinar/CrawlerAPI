@@ -7,19 +7,18 @@ from typing import Dict, List
 import networkx as nx
 
 from src.constants import SCORE_MULTIPLIER_INCREMENT, PowerupType, TrapType
-from src.dependencies import GraphResolver
-from src.interfaces import ICacheRepository, ILeaderboardRepository
-from src.models import (
+from src.Course.models import (
     Course,
     CourseComplete,
     CourseModifiersHidden,
     CoursePowerup,
     CourseTracker,
     CourseTrap,
-    LeaderboardComplete,
-    LeaderboardDisplay,
-    Node,
 )
+from src.Graph.dependencies import GraphResolver
+from src.Graph.models import Node
+from src.Leaderboard.models import LeaderboardComplete, LeaderboardDisplay
+from src.Stores.interfaces import ICacheRepository, ILeaderboardRepository
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import logging
 import random
@@ -10,9 +12,9 @@ import networkx as nx
 import orjson
 from watchfiles import Change, DefaultFilter, awatch
 
-from .constants import GRAPH_ROOT, HTTPS_SCHEME, Compressor, compressor_extensions
-from .dependencies import GraphResolver
-from .models import GraphInfo, Node
+from src.constants import GRAPH_ROOT, HTTPS_SCHEME, Compressor, compressor_extensions
+from src.Graph.dependencies import GraphResolver
+from src.Graph.models import GraphInfo, Node
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -30,7 +32,6 @@ class GraphManager:
         self.compressor = compressor
         self.pool = ThreadPoolExecutor(max_workers=processes)
         self.graphs: List[Path] = None
-        # self.graph_info: dict[str, GraphInfo] = None
         self.available = True
         self.parsed: set[Path] = set()
 
