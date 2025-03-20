@@ -1,0 +1,2 @@
+class DatabaseBusyError(Exception):
+    pass

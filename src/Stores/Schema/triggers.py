@@ -1,4 +1,4 @@
 from sqlalchemy import event
 from sqlalchemy.sql import text
 
-from src.schema import tables
+from src.Stores.Schema import tables

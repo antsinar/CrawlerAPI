@@ -2,51 +2,17 @@ from __future__ import annotations
 
 import random
 from enum import Enum
-from functools import cached_property
 from typing import Dict, List, Optional
 from uuid import uuid4
 
 from pydantic import BaseModel, Field, PositiveInt
 
-from .constants import MoveOptions, PowerupType, TrapType
-
-
-class Node(BaseModel):
-    id: str
-
-    def __str__(self):
-        return self.id
+from src.constants import MoveOptions, PowerupType, TrapType
+from src.Graph.models import Node
 
 
 class NodePoints(Node):
     points: int = Field(default=10)
-
-
-class AdjList(BaseModel):
-    source: Node
-    dest: List[Node]
-
-    def __str__(self):
-        return f"{self.source} -> {self.dest}"
-
-
-class GraphInfo(BaseModel):
-    num_nodes: int
-    num_edges: int
-    teleport_nodes: List[Node] = Field(default_factory=list)
-
-
-class QueueUrl(BaseModel):
-    url: str
-    force: bool = False
-
-
-class NodeInGraph(BaseModel):
-    url: str
-    node: Node
-
-    def __str__(self):
-        return f"{self.url}: {self.node}"
 
 
 class NodeInCourse(BaseModel):
@@ -142,28 +108,3 @@ class CourseComplete(Course):
     )
     game_state: GameState = Field(default=GameState.IN_PROGRESS)
     tracker: CourseTracker
-
-
-class LeaderboardName(BaseModel):
-    course_url: str
-    moves: int
-
-    @cached_property
-    def key(self) -> str:
-        return f"{self.course_url}:{self.moves}"
-
-
-class LeaderboardDisplay(BaseModel):
-    uid: str = Field(default_factory=lambda _: uuid4().hex)
-    nickname: str
-    score: float
-    course_uid: str
-    stamp: str
-
-
-class LeaderboardTracker(CourseTracker):
-    pass
-
-
-class LeaderboardComplete(CourseComplete):
-    pass

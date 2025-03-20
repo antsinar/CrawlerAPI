@@ -15,14 +15,14 @@ from lxml import html
 from lxml.cssselect import CSSSelector
 from lxml.etree import ParseError
 
-from .constants import (
+from src.constants import (
     GRAPH_ROOT,
     Compressor,
     ConcurrentRequestLimit,
     CrawlDepth,
     compressor_extensions,
 )
-from .models import AdjList, Node
+from src.Graph.models import AdjList, Node
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -74,7 +74,7 @@ class Crawler:
             logger.info("Set up headers for http/2")
 
         logger.info(
-            f"Crawling initialized from client @ {test_connection_response.extensions["network_stream"].get_extra_info("server_addr")}"
+            f"Crawling initialized from client @ {test_connection_response.extensions['network_stream'].get_extra_info('server_addr')}"
         )
         return True
 

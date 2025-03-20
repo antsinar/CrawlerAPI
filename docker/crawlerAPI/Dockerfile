@@ -40,4 +40,6 @@ ENV PATH="/${APP_HOME}/.venv/bin:$PATH"
 
 EXPOSE 8080
 
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8080"]
+RUN alembic upgrade head
+
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8080", "--log-level", "info", "--timeout-keep-alive", "60"]
