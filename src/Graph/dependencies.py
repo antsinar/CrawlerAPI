@@ -104,7 +104,7 @@ async def url_in_crawled_from_object(
     url = req.get("url", None)
     if not url:
         raise HTTPException(status_code=400, detail="Url not present in request body")
-    parsed: ParseResult = urlparse(HTTP_SCHEME + url)
+    parsed: ParseResult = urlparse(url)
     if not parsed.scheme:
         raise HTTPException(status_code=400, detail="Wrong url format")
     if parsed.netloc not in crawled_urls:
@@ -136,7 +136,7 @@ async def url_not_in_crawled_from_object(
     url = req.get("url", None)
     if not url:
         raise HTTPException(status_code=400, detail="Url not present in request body")
-    parsed: ParseResult = urlparse(HTTP_SCHEME + url)
+    parsed: ParseResult = urlparse(url)
     if not parsed.scheme:
         raise HTTPException(status_code=400, detail="Wrong url format")
     if parsed.netloc in crawled_urls:

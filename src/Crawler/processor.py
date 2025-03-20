@@ -12,8 +12,8 @@ logger = logging.getLogger(__name__)
 
 
 class State(StrEnum):
-    RUNNING = auto()
-    IDLE = auto()
+    FULL = auto()
+    AVAILABLE = auto()
 
 
 class TaskQueue:
@@ -29,13 +29,22 @@ class TaskQueue:
         self.compressor: Compressor = compressor
         self.crawl_depth = crawl_depth
         self.request_limit = request_limit
-        self.state: State = State.IDLE
+
+    @property
+    def state(self) -> State:
+        match self.capacity:
+            case 0:
+                return State.FULL
+            case _:
+                return State.AVAILABLE
 
     @asynccontextmanager
     async def on_queue_push(self) -> AsyncGenerator[None, None]:
-        yield
-        if self.capacity > 0 and self.state == State.IDLE:
-            await self.process_queue()
+        try:
+            yield
+        finally:
+            if self.state == State.AVAILABLE:
+                await self.process_queue()
 
     @asynccontextmanager
     async def capacity_semaphore(self) -> AsyncGenerator[None, None]:
@@ -53,6 +62,13 @@ class TaskQueue:
     def get_capacity(self) -> int:
         return self.capacity
 
+    def task_done(self, future) -> None:
+        logger.info("Future finished")
+        self.queue.task_done()
+        self.capacity += 1
+        if self.get_size() > 0:
+            asyncio.get_running_loop().create_task(self.process_queue())
+
     async def push_url(self, url: str) -> None:
         """Pushes a url into the task queue"""
         async with self.on_queue_push():
@@ -61,25 +77,19 @@ class TaskQueue:
     async def process_queue(self):
         """Iterate on the urls in the queue and process them in a separate thread
         The capacity parameter indicates how many urls can be processed in concurrently
-        FIXME: Does not prevent an out of bounds call
-        Note:
-            Since I am not awaiting the task created by the loop.create_task() call, the capacity semaphore
-            is released before the task is done; after exiting the block.
-            This might be the reason the capacity is not respected
         """
-        async with self.capacity_semaphore():
-            self.state = State.RUNNING
+        self.capacity -= 1
+        try:
             url = await self.queue.get()
             loop = asyncio.get_running_loop()
-            loop.create_task(
+            task = loop.create_task(
                 process_url(url, self.compressor, self.crawl_depth, self.request_limit)
             )
-            self.queue.task_done()
-
-        if self.capacity > 0:
-            await self.process_queue()
-
-        self.state = State.IDLE
+            task.add_done_callback(self.task_done)
+        except Exception as e:
+            logger.error(e)
+        finally:
+            pass
 
     async def get_parsed_urls(self):
         """
@@ -93,15 +103,12 @@ class TaskQueue:
     async def get_status(self):
         return {
             "state": self.state,
-            "progress": await self.get_parsed_urls()
-            if self.state == State.RUNNING
-            else None,
-            "capacity": self.capacity,
+            "size": self.get_size(),
         }
 
     async def stop(self):
         """Graceful shutdown of the task queue and executor;
         Waits until all taskes inside the queue are executed
         """
-        logger.info("Shutting down Task Queue & Executor")
-        await self.queue.join()
+        logger.info("Shutting down Task Queue")
+        # TODO: cancel all running task

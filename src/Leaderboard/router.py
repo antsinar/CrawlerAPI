@@ -6,8 +6,7 @@ from fastapi.responses import JSONResponse
 from src.Course.models import GameState
 from src.Course.tasks import write_to_leaderboard
 from src.Leaderboard.models import LeaderboardTracker
-from src.Stores.Repositories.CacheRepository import ICacheRepository
-from src.Stores.Repositories.LeaderboardRepository import ILeaderboardRepository
+from src.Stores.interfaces import ICacheRepository, ILeaderboardRepository
 
 router = APIRouter(prefix="/leaderboard", tags=["leaderboard"])
 
