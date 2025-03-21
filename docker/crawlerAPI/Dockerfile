@@ -38,8 +38,8 @@ COPY . .
 COPY --from=builder ${APP_HOME}/.venv .venv
 ENV PATH="/${APP_HOME}/.venv/bin:$PATH"
 
-EXPOSE 8080
+EXPOSE 8000
 
 RUN alembic upgrade head
 
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8080", "--log-level", "info", "--timeout-keep-alive", "60"]
+CMD [ "python3", "runserver.py", "--profile", "prod" ]

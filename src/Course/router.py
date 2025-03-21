@@ -70,6 +70,11 @@ async def generate_course_url(
         for url in resolvers.keys()
         if request.app.state.info_updater.graph_info[url].num_nodes in difficulty_range
     ]
+    if not possible_urls:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Could not find course with difficulty {difficulty}",
+        )
     random.shuffle(possible_urls)
     return {"url": random.choice(possible_urls)}
 

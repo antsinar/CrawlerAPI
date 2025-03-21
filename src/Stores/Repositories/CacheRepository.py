@@ -33,8 +33,8 @@ def _match_engine(engine: StorageEngine) -> ILeaderboardRepository:
 
 
 class DictCacheRepository:
-    def __init__(self, storage_engine: StorageEngine):
-        self.storage_engine: ILeaderboardRepository = _match_engine(storage_engine)
+    def __init__(self, storage_engine: ILeaderboardRepository):
+        self.storage_engine: ILeaderboardRepository = storage_engine
         self.client: Dict[str, CourseTracker] = dict()
         self.client_modifiers: Dict[str, CourseModifiersHidden] = dict()
 
@@ -72,8 +72,8 @@ class DictCacheRepository:
 
 
 class MemcachedCacheRepository:
-    def __init__(self, storage_engine: StorageEngine):
-        self.storage_engine: ILeaderboardRepository = _match_engine(storage_engine)
+    def __init__(self, storage_engine: ILeaderboardRepository):
+        self.storage_engine: ILeaderboardRepository = storage_engine
         self.client: PooledClient = PooledClient("localhost", 11211)
         self.course_index: List[str] = list()
         self.client.flush_all()

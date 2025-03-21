@@ -1,0 +1,31 @@
+[config]
+host = "0.0.0.0"
+port = 8000
+
+[config.dev]
+environment = "dev"
+leaderboard_engine = "sqlite"
+cache_engine = "dict"
+crawl_depth = "average"
+request_limit = "aggresive"
+compressor = "lzma"
+timeout = 5
+
+[config.offline]
+environment = "offline"
+leaderboard_engine = "dict"
+cache_engine = "dict"
+crawl_depth = "deep"
+request_limit = "aggresive"
+compressor = "lzma"
+timeout = 5
+
+[config.prod]
+environment = "production"
+leaderboard_engine = "sqlite"
+cache_engine = "dict"
+crawl_depth = "average"
+request_limit = "average"
+compressor = "lzma"
+worker_threads = 2
+timeout = 30
